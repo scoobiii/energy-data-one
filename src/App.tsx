@@ -30,7 +30,8 @@ import {
   X,
   Download,
   Check,
-  AlertTriangle
+  AlertTriangle,
+  Calendar
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -246,11 +247,48 @@ const CustomTreemapContent = (props: any) => {
   );
 };
 
+const Sparkline = ({ data, change }: { data: number[]; change: number }) => {
+  if (!data || data.length === 0) return null;
+  const max = Math.max(...data);
+  const min = Math.min(...data);
+  const range = max - min === 0 ? 1 : max - min;
+  const points = data.map((val, idx) => {
+    const x = (idx / (data.length - 1)) * 60;
+    const y = 16 - ((val - min) / range) * 14;
+    return `${x},${y}`;
+  }).join(' ');
+
+  const strokeColor = change >= 0 ? '#10b981' : '#f43f5e';
+
+  return (
+    <svg className="w-16 h-5" viewBox="0 0 60 16">
+      <polyline
+        fill="none"
+        stroke={strokeColor}
+        strokeWidth="1.8"
+        points={points}
+      />
+    </svg>
+  );
+};
+
 const treemapDetailsLookup: Record<string, {
   title: string;
   badge: string;
   description: string;
-  subComponents: { name: string; share: string; status: string }[];
+  subComponents: {
+    ticker: string;
+    name: string;
+    size: number;
+    change: number;
+    status: string;
+    location: string;
+    operator: string;
+    share: string;
+    sparkline: number[];
+    description?: string;
+    challenges?: string[];
+  }[];
   regulatoryText: string;
   vision2040Text: string;
   challenges: string[];
@@ -260,9 +298,71 @@ const treemapDetailsLookup: Record<string, {
     badge: 'ONS.HIDR • Centralizada',
     description: 'Espinha dorsal da estabilidade energética e da regulação de frequência do Sistema Interligado Nacional (SIN). Controla os principais reservatórios hidráulicos de regularização do país.',
     subComponents: [
-      { name: 'Usinas de Grande Porte (UHE) com Reservatório', share: '62%', status: 'Operacional' },
-      { name: 'Usinas a Fio d\'Água (Sem Reservatório)', share: '33%', status: 'Operacional/Sazonal' },
-      { name: 'Pequenas Centrais Hidrelétricas (PCH) Centralizadas', share: '5%', status: 'Operacional' },
+      {
+        ticker: 'UHE.ITAIPU',
+        name: 'UHE Itaipu Binacional',
+        size: 14000,
+        change: 0.20,
+        status: 'Operacional',
+        location: 'Foz do Iguaçu - PR',
+        operator: 'Itaipu Binacional',
+        share: '20.6%',
+        sparkline: [13800, 13900, 14000, 13950, 14020, 13980, 14000],
+        description: 'Maior usina hidrelétrica em geração de energia acumulada do planeta, operando como ativo binacional estratégico fundamental para o controle de frequência do SIN.',
+        challenges: ['Garantia física de longo termo influenciada pelo fluxo do Rio Paraná', 'Coordenação operacional binacional entre Brasil e Paraguai']
+      },
+      {
+        ticker: 'UHE.BMONTE',
+        name: 'UHE Belo Monte',
+        size: 11233,
+        change: -1.50,
+        status: 'Sazonal',
+        location: 'Altamira - PA',
+        operator: 'Norte Energia S/A',
+        share: '16.5%',
+        sparkline: [8500, 8100, 7800, 7500, 7200, 6800, 6500],
+        description: 'A maior hidrelétrica 100% brasileira. Opera no regime de fio d\'água no Rio Xingu, com alta sensibilidade à sazonalidade do período seco amazônico.',
+        challenges: ['Vazões reduzidas severas na bacia do Rio Xingu durante a estiagem', 'Cumprimento de condicionantes socioambientais rigorosas']
+      },
+      {
+        ticker: 'UHE.TUCURUI',
+        name: 'UHE Tucuruí',
+        size: 8535,
+        change: 0.10,
+        status: 'Operacional',
+        location: 'Tucuruí - PA',
+        operator: 'Eletrobras Eletronorte',
+        share: '12.5%',
+        sparkline: [8300, 8400, 8450, 8420, 8500, 8510, 8535],
+        description: 'Crucial para o escoamento de energia da região Norte para o Nordeste e Sudeste, com um reservatório de regularização de grande porte.',
+        challenges: ['Coordenação de múltiplos usos do reservatório e eclusas de navegação', 'Modernização de turbinas antigas']
+      },
+      {
+        ticker: 'UHE.JIRAU',
+        name: 'UHE Jirau',
+        size: 3750,
+        change: 0.50,
+        status: 'Operacional',
+        location: 'Porto Velho - RO',
+        operator: 'Energia Sustentável do Brasil',
+        share: '5.5%',
+        sparkline: [3600, 3650, 3680, 3700, 3710, 3730, 3750],
+        description: 'Localizada no Rio Madeira, utiliza turbinas tipo bulbo de alta tecnologia para baixa queda, reduzindo a área inundada do reservatório.',
+        challenges: ['Abrasão das pás de turbina devido ao alto teor de sedimentos do Rio Madeira', 'Estreita janela operativa no período de cheias']
+      },
+      {
+        ticker: 'UHE.SANTO_ANTONIO',
+        name: 'UHE Santo Antônio',
+        size: 3568,
+        change: -0.80,
+        status: 'Operacional',
+        location: 'Porto Velho - RO',
+        operator: 'Santo Antônio Energia S/A',
+        share: '5.2%',
+        sparkline: [3400, 3450, 3430, 3480, 3460, 3500, 3568],
+        description: 'Também no complexo do Rio Madeira, opera como geradora chave para o suprimento do subsistema Sudeste/Centro-Oeste.',
+        challenges: ['Logística de manutenção especializada em região de floresta equatorial', 'Variação rápida de vazões de afluentes']
+      }
     ],
     regulatoryText: 'Regulada pelo ONS na operação direta do SIN. Sob as regras de despacho físico, sua valoração econômica é balizada pelo Custo de Oportunidade da Água (PLD Horário do DESSEM) e pelo Mecanismo de Realocação de Energia (MRE).',
     vision2040Text: 'Prevê a modernização de ativos (repensar e repotencializar turbinas de usinas com mais de 30 anos) e a conversão de usinas selecionadas em Sistemas de Bombeamento Reversível (Pumped Storage), atuando como baterias de água gigantescas de 135 GW para cobrir picos solares e eólicos.',
@@ -277,8 +377,58 @@ const treemapDetailsLookup: Record<string, {
     badge: 'ONS.EOL • Centralizada',
     description: 'Complexos de aerogeradores de grande escala localizados principalmente nas regiões de ventos de alta qualidade do Nordeste e Extremo Sul do Brasil. Apresenta alta complementaridade com a geração hidrelétrica.',
     subComponents: [
-      { name: 'Parques Eólicos Onshore (Nordeste/Rio Grande do Sul)', share: '96%', status: 'Operacional/Expansão' },
-      { name: 'Parques Eólicos Offshore (Projetos em Licenciamento)', share: '4%', status: 'Em Planejamento' },
+      {
+        ticker: 'EOL.CASA_VENTOS',
+        name: 'Complexo Casa dos Ventos',
+        size: 2500,
+        change: 4.20,
+        status: 'Expansão',
+        location: 'Vários - Nordeste',
+        operator: 'Casa dos Ventos',
+        share: '15.6%',
+        sparkline: [2200, 2300, 2410, 2350, 2450, 2480, 2500],
+        description: 'Maior desenvolvedor de projetos eólicos onshore do país, com parques de alto fator de capacidade no Ceará, Pernambuco e Piauí.',
+        challenges: ['Saturação das linhas de transmissão regionais de subtransmissão', 'Negociação de contratos de longo prazo (PPA) em mercado livre volátil']
+      },
+      {
+        ticker: 'EOL.LAGOA_VENTOS',
+        name: 'Complexo Eólico Lagoa dos Ventos',
+        size: 1012,
+        change: 5.10,
+        status: 'Operacional',
+        location: 'Lagoa do Barro - PI',
+        operator: 'Enel Green Power',
+        share: '6.3%',
+        sparkline: [910, 930, 950, 970, 990, 1005, 1012],
+        description: 'O maior parque eólico operacional da América do Sul, com aerogeradores de última geração operados de forma totalmente automatizada.',
+        challenges: ['Coordenação de múltiplos inversores de parque em conexões fracas de rede', 'Logística pesada para substituição de componentes mecânicos de grande escala']
+      },
+      {
+        ticker: 'EOL.SERRA_MEL',
+        name: 'Complexo Serra do Mel',
+        size: 950,
+        change: 4.80,
+        status: 'Operacional',
+        location: 'Serra do Mel - RN',
+        operator: 'Voltalia Brasil',
+        share: '5.9%',
+        sparkline: [880, 910, 920, 900, 930, 940, 950],
+        description: 'Parque localizado em uma das regiões com ventos mais unidirecionais e estáveis do Brasil, alcançando fatores de capacidade excepcionais de mais de 50%.',
+        challenges: ['Abrasão salina em pás expostas a ventos litorâneos carregados de umidade', 'Cumprimento de contratos de fornecimento firme em picos de calmaria']
+      },
+      {
+        ticker: 'EOL.RIO_VENTO',
+        name: 'Complexo Rio do Vento',
+        size: 1038,
+        change: 3.90,
+        status: 'Operacional',
+        location: 'Lajes - RN',
+        operator: 'Casa dos Ventos / Elera',
+        share: '6.5%',
+        sparkline: [980, 1000, 1010, 1005, 1020, 1030, 1038],
+        description: 'Geração robusta integrada diretamente à rede básica nacional de alta tensão, negociando energia predominantemente no mercado livre (ACL).',
+        challenges: ['Controle de harmônicos e oscilações de frequência em conexões de subtransmissão', 'Flutuações de velocidade de vento que impactam planejamento diário do ONS']
+      }
     ],
     regulatoryText: 'Os contratos de geração eólica competem ferozmente no Ambiente de Contratação Livre (ACL). No aspecto operacional, sofrem frequentes restrições de corte pelo ONS (curtailment) para evitar sobrecargas regionais nas linhas de transmissão.',
     vision2040Text: 'Crescimento exponencial para 240 GW. Projetos offshore ao longo do Ceará, Rio Grande do Norte e Rio de Janeiro serão integrados à rede nacional com subestações marinhas de alta tecnologia, destinando o excedente para a produção em larga escala de Hidrogênio Verde.',
@@ -293,8 +443,58 @@ const treemapDetailsLookup: Record<string, {
     badge: 'ONS.SOL • Centralizada',
     description: 'Grandes usinas solares centralizadas com rastreamento solar dinâmico de um eixo (single-axis trackers) focadas em mercados de grande porte e autoprodução industrial.',
     subComponents: [
-      { name: 'Usinas de Grande Porte (Utility-Scale Tracker)', share: '92%', status: 'Operacional' },
-      { name: 'Sistemas com Ângulo Fixo (Fixed Tilt)', share: '8%', status: 'Operacional' },
+      {
+        ticker: 'SOL.JANAUBA',
+        name: 'Complexo Solar Janaúba',
+        size: 1200,
+        change: 14.20,
+        status: 'Operacional',
+        location: 'Janaúba - MG',
+        operator: 'Elera Renováveis',
+        share: '15.0%',
+        sparkline: [800, 900, 1000, 1050, 1100, 1150, 1200],
+        description: 'Um dos maiores complexos solares da América Latina, cobrindo uma área de mais de 3.000 hectares com trackers solares inteligentes de alta eficiência.',
+        challenges: ['Manutenção e limpeza de milhões de módulos em região semiárida', 'Inversão do PLD horário para valores mínimos devido à alta concentração de geração diurna']
+      },
+      {
+        ticker: 'SOL.FUTURA',
+        name: 'Complexo Solar Futura',
+        size: 852,
+        change: 12.40,
+        status: 'Operacional',
+        location: 'Juazeiro - BA',
+        operator: 'Eneva S/A',
+        share: '10.7%',
+        sparkline: [600, 700, 750, 780, 820, 840, 852],
+        description: 'Parque de grande porte que fornece energia limpa principalmente sob o modelo de autoprodução por equivalência de carga para parceiros industriais.',
+        challenges: ['Suavização de rampas de subida e descida de geração (Duck Curve)', 'Custos associados à expansão da subestação de acoplamento com a rede básica']
+      },
+      {
+        ticker: 'SOL.SAO_GONCALO',
+        name: 'Complexo Solar São Gonçalo',
+        size: 864,
+        change: 11.80,
+        status: 'Operacional',
+        location: 'São Gonçalo do Gurguéia - PI',
+        operator: 'Enel Green Power',
+        share: '10.8%',
+        sparkline: [700, 750, 800, 810, 830, 850, 864],
+        description: 'Pioneiro na utilização de módulos bifaciais que captam a radiação refletida do solo, aumentando o rendimento energético anual em até 15%.',
+        challenges: ['Depósitos de poeira e areia que causam perdas de eficiência por sombreamento parcial', 'Custos regulatórios de transmissão interestadual de longa distância']
+      },
+      {
+        ticker: 'SOL.PIRAPORA',
+        name: 'Complexo Solar Pirapora',
+        size: 321,
+        change: 8.50,
+        status: 'Operacional',
+        location: 'Pirapora - MG',
+        operator: 'EDF Renewables / Canadian',
+        share: '4.0%',
+        sparkline: [290, 300, 310, 305, 312, 318, 321],
+        description: 'Primeira grande usina solar construída no Brasil com módulos fotovoltaicos montados e fabricados localmente com certificação do BNDES.',
+        challenges: ['Obsolescência técnica prematura de inversores centrais de primeira geração', 'Degradação térmica acelerada de células em picos de calor extremo']
+      }
     ],
     regulatoryText: 'Regulada pelas portarias do mercado livre de energia e pelos leilões de energia de reserva da ANEEL. Influencia o perfil de preços do DESSEM, jogando o preço horário ao piso do PLD durante as horas de pico de sol.',
     vision2040Text: 'Crescimento de 8 GW para 180 GW centralizados, obrigatoriamente acoplados com sistemas BESS industriais de 4 a 6 horas para suavizar a rampa de descarga de fim de tarde e garantir o fornecimento de ponta segura.',
@@ -309,9 +509,45 @@ const treemapDetailsLookup: Record<string, {
     badge: 'ONS.TERM • Centralizada',
     description: 'Complexos termelétricos centralizados de alta potência, essenciais para a segurança de carga e de tensão no SIN como reserva estável não intermitente.',
     subComponents: [
-      { name: 'Termelétricas a Gás Natural (Ciclo Combinado)', share: '55%', status: 'Operacional/Reserva' },
-      { name: 'Térmicas a Biomassa de Cana-de-Açúcar', share: '30%', status: 'Sazonal' },
-      { name: 'Usinas Nucleares (Angra 1 e 2)', share: '15%', status: 'Geração Firme' },
+      {
+        ticker: 'UTE.SERGIPE',
+        name: 'UTE Porto de Sergipe I',
+        size: 1551,
+        change: -8.20,
+        status: 'Reserva',
+        location: 'Barra dos Coqueiros - SE',
+        operator: 'Eneva S/A',
+        share: '15.5%',
+        sparkline: [1500, 1400, 1300, 1200, 1000, 800, 1551],
+        description: 'Uma das maiores termelétricas a gás natural da América Latina, abastecida por um terminal de regaseificação de GNL offshore dedicado.',
+        challenges: ['Elevado custo de importação do gás natural liquefeito (GNL) cotado em dólar', 'Baixo fator de utilização devido ao despacho prioritário de renováveis intermitentes']
+      },
+      {
+        ticker: 'UTE.ANGRA2',
+        name: 'Nuclear Angra 2',
+        size: 1350,
+        change: 0.02,
+        status: 'Operacional',
+        location: 'Angra dos Reis - RJ',
+        operator: 'Eletronuclear S/A',
+        share: '13.5%',
+        sparkline: [1349, 1350, 1350, 1350, 1350, 1350, 1350],
+        description: 'Unidade nuclear estratégica que gera energia de base constante (baseload), garantindo a estabilidade de carga e tensão para a região Sudeste.',
+        challenges: ['Planejamento complexo para paradas programadas de reabastecimento de combustível nuclear', 'Gestão rigorosa de rejeitos radioativos de acordo com protocolos globais']
+      },
+      {
+        ticker: 'UTE.MARIO_LAGO',
+        name: 'UTE Mário Lago',
+        size: 920,
+        change: -1.50,
+        status: 'Reserva',
+        location: 'Macaé - RJ',
+        operator: 'Petrobras S/A',
+        share: '9.2%',
+        sparkline: [900, 910, 880, 870, 890, 915, 920],
+        description: 'Instalação de turbogeradores térmicos a gás natural despachada em picos de demanda ou em condições de extrema escassez hídrica.',
+        challenges: ['Emissões locais de óxidos de nitrogênio (NOx) e gases de efeito estufa', 'Elevado custo marginal de operação (CVU) que onera encargos do SIN']
+      }
     ],
     regulatoryText: 'Despachadas por segurança operacional ou ordem de mérito pelo ONS. A receita de capacidade garante remuneração fixa em leilões de reserva de capacidade para prover estabilidade ao sistema de transmissão.',
     vision2040Text: 'Reconfiguração para 35 GW de potência. Desativação total de combustíveis fósseis pesados (carvão/óleo) e migração para biometano e turbinas termoelétricas alimentadas a Hidrogênio Verde ou amônia como contingência de curtíssimo prazo.',
@@ -326,9 +562,45 @@ const treemapDetailsLookup: Record<string, {
     badge: 'GD.SOLAR • Micro/Minigeração',
     description: 'A maior revolução de energia distribuída do país. Composta por milhões de telhados residenciais, comerciais, industriais e cooperativas de geração solar remota.',
     subComponents: [
-      { name: 'Microgeração Residencial (< 75 kW)', share: '62%', status: 'Operacional' },
-      { name: 'Minigeração Comercial e Industrial (75 kW - 5 MW)', share: '32%', status: 'Operacional' },
-      { name: 'Geração Compartilhada (Consórcios e Cooperativas)', share: '6%', status: 'Crescimento Rápido' },
+      {
+        ticker: 'GD.SOL.RES_MG',
+        name: 'Microgeração Residencial MG',
+        size: 1200,
+        change: 15.50,
+        status: 'Crescendo',
+        location: 'Minas Gerais - Vários',
+        operator: 'Consumidores Residenciais',
+        share: '22.5%',
+        sparkline: [980, 1020, 1050, 1100, 1120, 1150, 1200],
+        description: 'Milhares de pequenos telhados solares residenciais espalhados por Minas Gerais, liderando a GD nacional graças à isenção de ICMS histórica.',
+        challenges: ['Inversão de fluxo de potência em transformadores de subestação local de distribuição', 'Adaptação gradual às novas regras de compensação da Lei 14.300']
+      },
+      {
+        ticker: 'GD.SOL.RES_SP',
+        name: 'Microgeração Residencial SP',
+        size: 980,
+        change: 14.20,
+        status: 'Crescendo',
+        location: 'São Paulo - Vários',
+        operator: 'Consumidores Residenciais',
+        share: '18.4%',
+        sparkline: [850, 880, 900, 910, 930, 960, 980],
+        description: 'Crescimento acelerado de conexões em telhados da capital e interior paulista, impulsionado pela alta tarifa de energia local.',
+        challenges: ['Burocracia e atrasos no processo de homologação de acesso pelas distribuidoras', 'Gargalos físicos de espaço útil em coberturas residenciais urbanas']
+      },
+      {
+        ticker: 'GD.SOL.COM_SP',
+        name: 'Minigeração Comercial SP',
+        size: 650,
+        change: 12.80,
+        status: 'Operacional',
+        location: 'São Paulo - Vários',
+        operator: 'Pequenas e Médias Empresas',
+        share: '12.2%',
+        sparkline: [580, 600, 610, 620, 615, 640, 650],
+        description: 'Sistemas fotovoltaicos instalados em comércios, galpões e supermercados para redução imediata do custo fixo operacional.',
+        challenges: ['Cobrança de demanda contratada em contratos comerciais rígidos', 'Amortização financeira (Payback) alongada pelas novas regras de transição do Fio B']
+      }
     ],
     regulatoryText: 'Regida pela Lei 14.300/2022 (Marco Legal de GD). Conexões efetuadas pós-período de transição arcam gradualmente com parcelas da TUSD Fio B. Incentiva-se o autoconsumo local para otimizar faturamento e evitar sobrecarga na rede distribuidora.',
     vision2040Text: 'Salto espetacular para 320 GW. Cada telhado residencial e industrial operará com inversores híbridos inteligentes e armazenamento térmico ou elétrico em baterias locais, reduzindo a dependência da rede elétrica em 90% nos horários de pico.',
@@ -343,9 +615,45 @@ const treemapDetailsLookup: Record<string, {
     badge: 'GD.TERM • Micro/Minigeração',
     description: 'Pequenos geradores despacháveis descentralizados instalados junto ao centro de consumo, aproveitando resíduos orgânicos de aterros sanitários e atividades agropecuárias.',
     subComponents: [
-      { name: 'Biomassa Agroindustrial (Bagaço, Madeira, Cavaco)', share: '55%', status: 'Sazonal' },
-      { name: 'Biogás de Saneamento e Dejetos Animais', share: '35%', status: 'Operacional' },
-      { name: 'Geradores de Combustão de Emergência Comerciais', share: '10%', status: 'Operacional' },
+      {
+        ticker: 'GD.TERM.CAN_SP',
+        name: 'Biomassa Cana Ribeirão Preto',
+        size: 145,
+        change: 3.20,
+        status: 'Sazonal',
+        location: 'Ribeirão Preto - SP',
+        operator: 'Usinas de Açúcar e Álcool',
+        share: '35.2%',
+        sparkline: [120, 130, 135, 140, 142, 145, 145],
+        description: 'Geração térmica distribuída a partir da queima direta do bagaço da cana-de-açúcar durante o período de safra sucroalcooleira.',
+        challenges: ['Dependência extrema do cronograma agrícola e do volume de moagem de cana', 'Custo de armazenagem física de grandes estoques de bagaço para entressafra']
+      },
+      {
+        ticker: 'GD.TERM.BIOGAS_SC',
+        name: 'Biogás Suinocultura Chapecó',
+        size: 48,
+        change: 8.40,
+        status: 'Operacional',
+        location: 'Chapecó - SC',
+        operator: 'Cooperativa Agroindustrial',
+        share: '11.6%',
+        sparkline: [40, 42, 43, 45, 46, 47, 48],
+        description: 'Biodigestores de dejetos suínos no oeste catarinense, transformando passivo ambiental em energia estável 24h e biofertilizante de alta qualidade.',
+        challenges: ['Manutenção preventiva constante de motores de combustão interna contra corrosão de H2S', 'Investimento inicial alto para sistemas de purificação de biometano']
+      },
+      {
+        ticker: 'GD.TERM.ATERRO_SP',
+        name: 'Biogás Aterro Paulínia',
+        size: 25,
+        change: 5.00,
+        status: 'Operacional',
+        location: 'Paulínia - SP',
+        operator: 'Orizon Valorização',
+        share: '6.1%',
+        sparkline: [21, 22, 23, 23, 24, 25, 25],
+        description: 'Captação direta de metano do lixo orgânico urbano depositado no aterro, gerando energia constante acoplada à rede de baixa tensão.',
+        challenges: ['Declínio natural na curva de geração de gás após o fechamento de células de aterro', 'Necessidade de monitoramento de contaminantes siloxanos na queima']
+      }
     ],
     regulatoryText: 'Garante compensação de créditos sob o modelo de compensação da Lei 14.300/2022, com o benefício técnico de não sobrecarregar as linhas de subtransmissão por operar em base estável firme durante os períodos noturnos.',
     vision2040Text: 'Escalar para 45 GW, com aproveitamento em massa dos resíduos orgânicos e efluentes do agronegócio nacional (vinhaça de etanol de milho/cana e dejetos de suinocultura) convertidos em energia estável de base contínua.',
@@ -360,7 +668,32 @@ const treemapDetailsLookup: Record<string, {
     badge: 'GD.CGH • Micro/Minigeração',
     description: 'Pequenos aproveitamentos hidrelétricos descentralizados com potência individual inferior a 5 MW. Operam sob a modalidade de run-of-river (fio d\'água).',
     subComponents: [
-      { name: 'Centrais Geradoras Hidrelétricas (< 5 MW) Individuais', share: '100%', status: 'Operacional' },
+      {
+        ticker: 'GD.CGH.SAO_JOAO',
+        name: 'CGH São João',
+        size: 4.8,
+        change: 1.20,
+        status: 'Operacional',
+        location: 'Rio Sapucaí - MG',
+        operator: 'Hidro Metalúrgica Ltda',
+        share: '48.0%',
+        sparkline: [4.2, 4.5, 4.6, 4.5, 4.7, 4.8, 4.8],
+        description: 'Microcentral geradora hidrelétrica que atende a uma unidade industrial de fundição local através do modelo de autoconsumo remoto.',
+        challenges: ['Queda drástica no fator de capacidade nos meses secos do subsistema Sudeste', 'Custos regulatórios e tempo elevado para obtenção de outorga de barramento']
+      },
+      {
+        ticker: 'GD.CGH.PORTO_VERDE',
+        name: 'CGH Porto Verde',
+        size: 3.5,
+        change: -0.50,
+        status: 'Operacional',
+        location: 'Tibagi - PR',
+        operator: 'Cooperativa Agropecuária',
+        share: '35.0%',
+        sparkline: [3.8, 3.7, 3.6, 3.5, 3.5, 3.5, 3.5],
+        description: 'Central hídrica distribuída operando sem reservatório (fio d\'água), fornecendo estabilidade e créditos aos associados da cooperativa rural.',
+        challenges: ['Assoreamento de canais de captação após episódios de chuvas torrenciais', 'Manutenção corretiva difícil de realizar por acessibilidade geográfica remota']
+      }
     ],
     regulatoryText: 'Beneficia-se das regras de compensação distribuída de energia, fornecendo eletricidade com baixíssimo impacto ambiental e sem necessidade de reservatórios inundados.',
     vision2040Text: 'Meta de 15 GW instalados através do retrofitting (modernização tecnológica) de antigas turbinas industriais e fazendas históricas, com controle automatizado e sensoriamento preditivo por microrredes locais inteligentes.',
@@ -375,8 +708,32 @@ const treemapDetailsLookup: Record<string, {
     badge: 'GD.EOL • Micro/Minigeração',
     description: 'Geração de energia a partir da força dos ventos por meio de micro e pequenos aerogeradores distribuídos localmente para autoconsumo rural, de cooperativas ou pequenas indústrias.',
     subComponents: [
-      { name: 'Aerogeradores Rurais e Fazendas Isoladas Onshore', share: '85%', status: 'Operacional' },
-      { name: 'Sistemas Híbridos integrados Eólico-Solar', share: '15%', status: 'Operacional' },
+      {
+        ticker: 'GD.EOL.RURAL_RN',
+        name: 'Microeólica Fazendas RN',
+        size: 8.2,
+        change: 5.50,
+        status: 'Operacional',
+        location: 'Lajes - RN',
+        operator: 'Agropecuários RN',
+        share: '60.0%',
+        sparkline: [7.2, 7.5, 7.8, 8.0, 8.1, 8.2, 8.2],
+        description: 'Pequenos aerogeradores de baixa potência instalados em fazendas do sertão potiguar para suprimento de irrigação e bombeamento hídrico.',
+        challenges: ['Baixa disponibilidade de peças de reposição de microaerogeradores nacionais', 'Desgaste mecânico acelerado por ventos intensos e altas temperaturas']
+      },
+      {
+        ticker: 'GD.EOL.HIBRIDO_RS',
+        name: 'Híbrido Solar-Eólico Osório',
+        size: 3.8,
+        change: 2.10,
+        status: 'Operacional',
+        location: 'Osório - RS',
+        operator: 'Condomínio Industrial',
+        share: '27.8%',
+        sparkline: [3.2, 3.4, 3.5, 3.6, 3.7, 3.8, 3.8],
+        description: 'Projeto piloto integrando microgeração eólica e solar em uma malha híbrida industrial local com baterias estacionárias.',
+        challenges: ['Desenvolvimento de algoritmos complexos para controle coordenado de carga e descarga de bateria', 'Complexidade técnica de parametrização de inversores de acoplamento híbrido']
+      }
     ],
     regulatoryText: 'Compensa créditos de energia na baixa ou média tensão sob o marco legal da Lei 14.300/2022, geralmente com complementaridade com sistemas de compensação em baterias locais.',
     vision2040Text: 'Atingirá 10 GW de capacidade instalada através do desenvolvimento e disseminação de microaerogeradores de eixo vertical (VAWT) silenciosos e de alta eficiência, ideais para o setor comercial periurbano e agropecuária intensiva de corte.',
@@ -451,6 +808,12 @@ export default function App() {
   // Double-clicked Item Modal for deep-dive components and details
   const [selectedTreemapItem, setSelectedTreemapItem] = useState<any | null>(null);
   const [showTreemapDetailModal, setShowTreemapDetailModal] = useState<boolean>(false);
+  const [expandedSubComponent, setExpandedSubComponent] = useState<string | null>(null);
+
+  // ONS Load Curve modes: 'normal' | 'apagao'
+  const [onsViewMode, setOnsViewMode] = useState<'normal' | 'apagao'>('normal');
+  const [onsTimeframe, setOnsTimeframe] = useState<'diario' | 'mensal' | 'anual' | 'maximo'>('diario');
+  const [selectedONSDate, setSelectedONSDate] = useState<string>('2023-08-15');
 
   // Uncaught errors public log state (Observability & Diagnostics)
   const [uncaughtErrors, setUncaughtErrors] = useState<{ time: string; level: 'WARNING' | 'CRITICAL' | 'INFO'; message: string; component: string }[]>([
@@ -861,6 +1224,149 @@ MEx Energia BR • Tecnologia em Barramento 800VDC e Microrredes.
       { name: 'Térmica UTE', value: Number(ute.toFixed(1)), color: '#f97316' }
     ];
   }, [ufStats]);
+
+  // Parser for the selected ONS Date
+  const parsedONSDate = useMemo(() => {
+    try {
+      const d = new Date(selectedONSDate + 'T00:00:00');
+      if (isNaN(d.getTime())) return new Date('2023-08-15T00:00:00');
+      return d;
+    } catch {
+      return new Date('2023-08-15T00:00:00');
+    }
+  }, [selectedONSDate]);
+
+  // Unified ONS demand data based on timeframe ('diario', 'mensal', 'anual', 'maximo')
+  const displayedCargaData = useMemo(() => {
+    if (onsTimeframe === 'maximo') {
+      return [
+        { label: '2018', verificada_mw: 88300, programada_mw: 87500, desc: 'Recorde SE/CO' },
+        { label: '2019', verificada_mw: 91500, programada_mw: 91000, desc: 'Pico comercial pré-pandemia' },
+        { label: '2020', verificada_mw: 89800, programada_mw: 92000, desc: 'Impacto COVID-19' },
+        { label: '2021', verificada_mw: 92200, programada_mw: 91800, desc: 'Recuperação pós-crise hídrica' },
+        { label: '2022', verificada_mw: 95800, programada_mw: 95000, desc: 'Expansão de Microgeração (GD)' },
+        { label: '2023', verificada_mw: 101400, programada_mw: 99500, desc: 'Onda histórica de calor (Nov)' },
+        { label: '2024', verificada_mw: 102470, programada_mw: 101800, desc: 'Pico extremo de calor em Março (42ºC)' },
+        { label: '2025', verificada_mw: 103900, programada_mw: 103200, desc: 'Alta de Data Centers & IA' },
+        { label: '2026', verificada_mw: 105200, programada_mw: 104500, desc: 'Projeção ONS de Demanda Máxima' }
+      ];
+    }
+
+    if (onsTimeframe === 'anual') {
+      const year = parsedONSDate.getFullYear();
+      const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+      const baseYearlyPeak = 74000;
+      const seasonalEffects = [4800, 5200, 4100, 1200, -1200, -2800, -3100, -1400, 900, 2700, 3800, 4500];
+      const growthFactor = 1 + (year - 2023) * 0.032;
+
+      return monthNames.map((name, index) => {
+        const baseOffset = seasonalEffects[index];
+        const avgLoad = (baseYearlyPeak + baseOffset) * growthFactor;
+        const seed = year * 100 + index;
+        const noise = Math.cos(seed) * 500;
+
+        let verificada_mw = Math.round(avgLoad + noise);
+        let programada_mw = Math.round(avgLoad * 1.008);
+
+        if (year === 2023 && index === 7) {
+          verificada_mw = Math.round(verificada_mw - 350); // August blackout drop
+        }
+
+        return {
+          label: name,
+          verificada_mw,
+          programada_mw,
+          desc: `Média de ${name}/${year}`
+        };
+      });
+    }
+
+    if (onsTimeframe === 'mensal') {
+      const year = parsedONSDate.getFullYear();
+      const month = parsedONSDate.getMonth();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const seasonalEffects = [4500, 5000, 3800, 1500, -1000, -2500, -2800, -1200, 800, 2500, 3500, 4200];
+      const baseOffset = seasonalEffects[month] || 0;
+
+      const list = [];
+      for (let day = 1; day <= daysInMonth; day++) {
+        const currentDayDate = new Date(year, month, day);
+        const dayOfWeek = currentDayDate.getDay();
+
+        let scaleFactor = 1.0;
+        if (dayOfWeek === 0) scaleFactor = 0.77; // Sunday
+        else if (dayOfWeek === 6) scaleFactor = 0.87; // Saturday
+
+        const baseDailyLoad = 72000 * scaleFactor + baseOffset;
+        const daySeed = year * 1000 + month * 100 + day;
+        const noise = Math.sin(daySeed) * 1200;
+
+        let verificada_mw = Math.round(baseDailyLoad + noise);
+        let programada_mw = Math.round(baseDailyLoad * 1.012);
+
+        if (year === 2023 && month === 7 && day === 15) {
+          verificada_mw = Math.round(verificada_mw - 8500); // 15/08/2023 average load crash
+        }
+
+        list.push({
+          label: `${day.toString().padStart(2, '0')}`,
+          verificada_mw,
+          programada_mw,
+          fullDateStr: `${year}-${(month + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`
+        });
+      }
+      return list;
+    }
+
+    // Default: 'diario'
+    const dayOfWeek = parsedONSDate.getDay();
+    const month = parsedONSDate.getMonth();
+    
+    let scaleFactor = 1.0;
+    if (dayOfWeek === 0) scaleFactor = 0.76;
+    else if (dayOfWeek === 6) scaleFactor = 0.86;
+
+    const seasonalEffects = [4500, 5000, 3800, 1500, -1000, -2500, -2800, -1200, 800, 2500, 3500, 4200];
+    const baseOffset = seasonalEffects[month] || 0;
+
+    return cargaData.map(item => {
+      if (!item.hora) return item;
+      
+      let valVerificada = item.verificada_mw * scaleFactor + baseOffset;
+      let valProgramada = item.programada_mw * scaleFactor + baseOffset;
+
+      const dateStr = selectedONSDate;
+      let hash = 0;
+      for (let i = 0; i < dateStr.length; i++) {
+        hash = dateStr.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      const noiseFactor = (hash % 100) / 100;
+      const randomVariation = noiseFactor * 800;
+      
+      valVerificada = Math.round(valVerificada + randomVariation);
+      valProgramada = Math.round(valProgramada + randomVariation * 0.9);
+
+      if (selectedONSDate === '2023-08-15' && onsViewMode === 'apagao') {
+        const [hStr, mStr] = item.hora.split(':');
+        const h = parseInt(hStr, 10);
+        const m = parseInt(mStr, 10);
+        const t = h + (m === 30 ? 0.5 : 0);
+
+        if (t >= 8.5 && t <= 15.0) {
+          const hoursSinceEvent = t - 8.5;
+          const recoveryFactor = Math.min(1, hoursSinceEvent / 6);
+          const dropAmount = 19000 * (1 - recoveryFactor);
+          valVerificada = Math.max(20000, Math.round(valVerificada - dropAmount));
+        }
+      }
+
+      return {
+        hora: item.hora,
+        verificada_mw: valVerificada,
+        programada_mw: valProgramada
+      };
+    });
+  }, [cargaData, onsTimeframe, parsedONSDate, selectedONSDate, onsViewMode]);
 
   // Integrated Treemap Data (Proportional to MW load) - combining ONS Centralized and MMGD
   const treemapData = useMemo(() => {
@@ -1699,24 +2205,346 @@ MEx Energia BR • Tecnologia em Barramento 800VDC e Microrredes.
 
                   {/* 1. ONS Load Curve (Line Chart) */}
                   <div className="bg-[#0c1222] border border-slate-800 rounded-xl p-5">
-                    <div className="mb-4">
-                      <h3 className="text-sm font-bold text-white uppercase tracking-wider">Curva de Demanda de Carga ONS (Semi-horária)</h3>
-                      <p className="text-xs text-slate-400 mt-0.5">Demonstração da carga total verificada contra a programada pelo operador nacional.</p>
+                    <div className="mb-4 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+                      <div>
+                        <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                          <Activity className="w-4 h-4 text-cyan-400" />
+                          Curva de Demanda de Carga ONS ({
+                            onsTimeframe === 'diario' ? 'Semi-horária' :
+                            onsTimeframe === 'mensal' ? 'Diária' :
+                            onsTimeframe === 'anual' ? 'Mensal' : 'Série Máxima Histórica'
+                          })
+                        </h3>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {
+                            onsTimeframe === 'diario' ? 'Acompanhamento da carga horária verificada contra programada pelo operador nacional.' :
+                            onsTimeframe === 'mensal' ? 'Comportamento da carga diária média ao longo do mês selecionado.' :
+                            onsTimeframe === 'anual' ? 'Evolução sazonal da demanda média mensal ao longo do ano selecionado.' :
+                            'Pico máximo histórico de potência instantânea atingido no SIN por ano (MW).'
+                          }
+                        </p>
+                      </div>
+
+                      {/* Timeframe pill selector */}
+                      <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0 self-start xl:self-auto">
+                        <button
+                          onClick={() => setOnsTimeframe('diario')}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                            onsTimeframe === 'diario'
+                              ? 'bg-cyan-500 text-black shadow'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          Diário
+                        </button>
+                        <button
+                          onClick={() => setOnsTimeframe('mensal')}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                            onsTimeframe === 'mensal'
+                              ? 'bg-cyan-500 text-black shadow'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          Mensal
+                        </button>
+                        <button
+                          onClick={() => setOnsTimeframe('anual')}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                            onsTimeframe === 'anual'
+                              ? 'bg-cyan-500 text-black shadow'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          Anual
+                        </button>
+                        <button
+                          onClick={() => setOnsTimeframe('maximo')}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                            onsTimeframe === 'maximo'
+                              ? 'bg-cyan-500 text-black shadow'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          Máximo
+                        </button>
+                      </div>
                     </div>
 
+                    {/* Controls Row: Date Query, Quick Actions & Toggle */}
+                    <div className="mb-6 bg-slate-950/50 border border-slate-800/60 p-4 rounded-xl flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+                      <div className="flex flex-wrap items-center gap-3">
+                        {onsTimeframe !== 'maximo' && (
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Consulta por Data</span>
+                            <div className="relative">
+                              <Calendar className="w-3.5 h-3.5 text-cyan-500 absolute left-3 top-2.5 pointer-events-none" />
+                              <input
+                                type="date"
+                                value={selectedONSDate}
+                                onChange={(e) => {
+                                  setSelectedONSDate(e.target.value);
+                                }}
+                                className="bg-slate-900 border border-slate-800 hover:border-slate-700 focus:border-cyan-500 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 font-mono transition-all focus:outline-none cursor-pointer"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Quick teleport buttons */}
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Atalhos</span>
+                          <div className="flex gap-1.5 py-1">
+                            <button
+                              onClick={() => {
+                                setSelectedONSDate('2023-08-15');
+                                setOnsTimeframe('diario');
+                                setOnsViewMode('apagao');
+                              }}
+                              className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 px-2 py-1 rounded text-[10px] font-semibold cursor-pointer transition-all active:scale-95"
+                            >
+                              Apagão (15/08/23)
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedONSDate('2026-07-14');
+                                if (onsTimeframe === 'maximo') setOnsTimeframe('diario');
+                              }}
+                              className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 px-2 py-1 rounded text-[10px] font-semibold cursor-pointer transition-all active:scale-95"
+                            >
+                              Tempo Real (Hoje)
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Blackout status simulator only in Daily mode with 15/08/2023 selected */}
+                      {onsTimeframe === 'diario' && (
+                        <div className="flex flex-col items-end gap-1.5 shrink-0 w-full md:w-auto">
+                          <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Simulador de Instabilidade</span>
+                          <div className="flex bg-slate-900/80 p-0.5 rounded-lg border border-slate-800 w-full md:w-auto">
+                            {selectedONSDate === '2023-08-15' ? (
+                              <>
+                                <button
+                                  onClick={() => setOnsViewMode('normal')}
+                                  className={`flex-1 md:flex-none px-3 py-1 text-[11px] font-bold rounded transition-all cursor-pointer ${
+                                    onsViewMode === 'normal'
+                                      ? 'bg-cyan-500 text-black shadow'
+                                      : 'text-slate-400 hover:text-slate-200'
+                                  }`}
+                                >
+                                  Carga Regular
+                                </button>
+                                <button
+                                  onClick={() => setOnsViewMode('apagao')}
+                                  className={`flex-1 md:flex-none px-3 py-1 text-[11px] font-bold rounded transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                                    onsViewMode === 'apagao'
+                                      ? 'bg-rose-500 text-white shadow animate-pulse'
+                                      : 'text-slate-400 hover:text-rose-400'
+                                  }`}
+                                >
+                                  <AlertTriangle className="w-3 h-3" />
+                                  Queda SIN (15/08)
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setSelectedONSDate('2023-08-15');
+                                  setOnsTimeframe('diario');
+                                  setOnsViewMode('apagao');
+                                }}
+                                className="px-3 py-1 text-[10px] text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1 cursor-pointer transition-all w-full justify-center"
+                              >
+                                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                                Carregar Data do Apagão para Simular
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Monthly info message */}
+                      {onsTimeframe === 'mensal' && (
+                        <div className="text-right hidden md:block text-slate-400 text-[11px]">
+                          Mostrando dias de <strong className="text-cyan-400">{parsedONSDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}</strong>.
+                        </div>
+                      )}
+
+                      {/* Annual info message */}
+                      {onsTimeframe === 'anual' && (
+                        <div className="text-right hidden md:block text-slate-400 text-[11px]">
+                          Mostrando perfil sazonal do ano de <strong className="text-cyan-400">{parsedONSDate.getFullYear()}</strong>.
+                        </div>
+                      )}
+
+                      {/* Maximo info message */}
+                      {onsTimeframe === 'maximo' && (
+                        <div className="text-right hidden md:block text-slate-400 text-[11px]">
+                          Picos de potência instantânea do SIN brasileira.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Chart area */}
                     <div className="h-80">
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={cargaData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                        <LineChart 
+                          data={displayedCargaData} 
+                          margin={{ top: 15, right: 15, left: 15, bottom: 5 }}
+                          onClick={(state: any) => {
+                            // If mensal timeframe, user can click a day to jump to daily view!
+                            if (onsTimeframe === 'mensal' && state && state.activePayload && state.activePayload[0]) {
+                              const clickedItem = state.activePayload[0].payload;
+                              if (clickedItem && clickedItem.fullDateStr) {
+                                setSelectedONSDate(clickedItem.fullDateStr);
+                                setOnsTimeframe('diario');
+                              }
+                            }
+                          }}
+                        >
                           <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                          <XAxis dataKey="hora" stroke="#64748b" fontSize={10} />
-                          <YAxis stroke="#64748b" fontSize={10} domain={['dataMin - 5000', 'dataMax + 2000']} />
-                          <Tooltip contentStyle={{ backgroundColor: '#0c1222', borderColor: '#334155', color: '#f8fafc' }} />
+                          <XAxis 
+                            dataKey={onsTimeframe === 'diario' ? 'hora' : 'label'} 
+                            stroke="#64748b" 
+                            fontSize={10} 
+                            tickLine={false}
+                          />
+                          <YAxis 
+                            stroke="#64748b" 
+                            fontSize={10} 
+                            domain={
+                              onsTimeframe === 'diario' ? ['dataMin - 3000', 'dataMax + 1000'] :
+                              onsTimeframe === 'mensal' ? ['dataMin - 5000', 'dataMax + 2000'] :
+                              onsTimeframe === 'anual' ? ['dataMin - 6000', 'dataMax + 3000'] :
+                              ['dataMin - 8000', 'dataMax + 2000']
+                            }
+                            tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
+                          />
+                          <Tooltip 
+                            contentStyle={{ backgroundColor: '#0c1222', borderColor: '#334155', color: '#f8fafc' }}
+                            formatter={(value) => [`${Number(value).toLocaleString('pt-BR')} MW`, '']}
+                            labelFormatter={(label) => {
+                              if (onsTimeframe === 'diario') return `Hora: ${label}`;
+                              if (onsTimeframe === 'mensal') return `Dia ${label} de ${parsedONSDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}`;
+                              if (onsTimeframe === 'anual') return `Mês: ${label}/${parsedONSDate.getFullYear()}`;
+                              return `Ano: ${label}`;
+                            }}
+                          />
                           <Legend />
-                          <Line type="monotone" dataKey="verificada_mw" name="Carga Verificada (MW)" stroke="#22c55e" strokeWidth={2.5} dot={false} activeDot={{ r: 6 }} />
-                          <Line type="monotone" dataKey="programada_mw" name="Carga Programada (MW)" stroke="#94a3b8" strokeDasharray="5 5" strokeWidth={1.5} dot={false} />
+                          <Line 
+                            type="monotone" 
+                            dataKey="verificada_mw" 
+                            name={onsTimeframe === 'maximo' ? "Demanda de Pico (MW)" : "Carga Verificada (MW)"} 
+                            stroke={
+                              onsTimeframe === 'diario' && selectedONSDate === '2023-08-15' && onsViewMode === 'apagao' 
+                                ? '#ef4444' 
+                                : '#22c55e'
+                            } 
+                            strokeWidth={2.5} 
+                            dot={onsTimeframe !== 'diario'} 
+                            activeDot={{ r: 6 }} 
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="programada_mw" 
+                            name={onsTimeframe === 'maximo' ? "Previsão ONS Histórica (MW)" : "Carga Programada (MW)"} 
+                            stroke="#94a3b8" 
+                            strokeDasharray="5 5" 
+                            strokeWidth={1.5} 
+                            dot={false} 
+                          />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
+
+                    {/* Informative Sub-Captions and Interactive elements */}
+                    <div className="mt-4 p-3 bg-slate-950/40 rounded-lg border border-slate-800/40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-[11px] text-slate-400">
+                      <div>
+                        {onsTimeframe === 'diario' && (
+                          <span>
+                            Exibindo dados para <strong className="text-white font-mono">{parsedONSDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</strong>.
+                            {parsedONSDate.getDay() === 0 || parsedONSDate.getDay() === 6 ? ' (Fim de semana: demanda industrial reduzida)' : ' (Dia útil comercial standard)'}
+                          </span>
+                        )}
+                        {onsTimeframe === 'mensal' && (
+                          <span className="flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                            <span>Dica de Interação: <strong>Clique em qualquer ponto do gráfico</strong> para detalhar a curva semi-horária daquele dia.</span>
+                          </span>
+                        )}
+                        {onsTimeframe === 'anual' && (
+                          <span>Exibindo médias mensais. Os meses de verão (Jan-Mar, Nov-Dez) apresentam picos extremos de ar-condicionado.</span>
+                        )}
+                        {onsTimeframe === 'maximo' && (
+                          <span>Série de recordes absolutos do SIN. A expansão acelerada de microgeração solar atenua a carga verificada líquida durante o dia.</span>
+                        )}
+                      </div>
+                      
+                      {onsTimeframe === 'maximo' && (
+                        <div className="text-amber-400 font-mono text-[10px] bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">
+                          Pico Histórico Máximo: 102.470 MW (Março/2024)
+                        </div>
+                      )}
+                    </div>
+
+                    {onsViewMode === 'apagao' && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mt-6 border border-rose-500/20 bg-rose-950/10 rounded-xl p-5 space-y-4"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="p-2 bg-rose-500/10 text-rose-400 rounded-lg shrink-0">
+                            <AlertTriangle className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-bold text-white flex items-center gap-2 flex-wrap">
+                              Relatório Operacional: Apagão de Referência no SIN
+                              <span className="text-[10px] bg-rose-500/20 text-rose-400 font-mono px-2 py-0.5 rounded-full font-bold">
+                                15/08/2023 08:30
+                              </span>
+                            </h4>
+                            <p className="text-xs text-rose-300/80 mt-1">
+                              Análise técnica do evento de desconexão em massa e rebaixamento severo da curva de carga verificado no Sistema Interligado Nacional (SIN).
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                          <div className="bg-slate-950/40 border border-slate-900 rounded-lg p-3.5 space-y-1.5">
+                            <span className="text-[10px] text-rose-400 font-mono uppercase tracking-wider block font-bold">Causa Raiz</span>
+                            <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                              O evento iniciou-se às <strong>08:30:13 BRT</strong> com a abertura automática da linha de transmissão de <strong>500 kV Quixadá-Fortaleza II (CE)</strong> no Nordeste. A perturbação ocorreu sob condições de alta exportação de energia renovável (eólica e solar) da região para o resto do país. Dispositivos de controle de tensão e reguladores de velocidade de geradores renováveis não responderam de forma estável, gerando uma oscilação generalizada de frequência (perda de estabilidade angular) em cascata.
+                            </p>
+                          </div>
+
+                          <div className="bg-slate-950/40 border border-slate-900 rounded-lg p-3.5 space-y-1.5">
+                            <span className="text-[10px] text-rose-400 font-mono uppercase tracking-wider block font-bold">Consequência & Efeito (Causa-Efeito)</span>
+                            <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                              Para mitigar o colapso físico e colapso de frequência da rede elétrica, foi acionada a atuação automática do <strong>ERAC (Esquema Regional de Alívio de Carga)</strong>. Isso resultou na desconexão instantânea de cerca de <strong>19.000 MW de demanda</strong> (25% da carga do país na hora), provocando desligamentos automáticos em 25 estados e Distrito Federal. Metrôs paralisaram, semáforos falharam e serviços vitais caíram. A recomposição total do SIN estendeu-se por cerca de 6 horas.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-rose-950/30 pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-[10px] text-slate-400 font-mono">
+                          <div>
+                            Métrica no Gráfico: Queda abrupta de <span className="text-rose-400 font-bold">-26.0%</span> na Carga Verificada às 08:30 AM
+                          </div>
+                          <button
+                            onClick={() => {
+                              setActiveTab('ai');
+                              setTimeout(() => {
+                                handleSendChat(undefined, "Quais foram as lições aprendidas e as novas diretrizes regulatórias e tecnológicas adotadas pelo ONS após o apagão nacional de 15 de agosto de 2023? Fale sobre o comportamento de geradores eólicos/solares.");
+                              }, 100);
+                            }}
+                            className="bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-300 px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5 self-start sm:self-auto cursor-pointer transition-all active:scale-95"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            Aprofundar via Chat de IA
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
                   </div>
 
                   {/* 2. DESSEM Balance stacked area chart */}
@@ -2662,35 +3490,157 @@ MEx Energia BR • Tecnologia em Barramento 800VDC e Microrredes.
                     <div>
                       <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-3 font-mono flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full" />
-                        Componentes e Subcategorias do Ativo
+                        Componentes e Subcategorias do Ativo (Clique para expandir)
                       </h4>
-                      <div className="border border-slate-800/60 rounded-xl overflow-hidden">
-                        <table className="w-full text-left text-xs">
-                          <thead>
-                            <tr className="bg-[#11192e] text-slate-400 border-b border-slate-800 font-mono text-[10px]">
-                              <th className="p-3">Categoria / Ativo</th>
-                              <th className="p-3 text-center">Fatia Est.</th>
-                              <th className="p-3 text-right">Status</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-800/40 font-mono text-[11px]">
-                            {treemapDetailsLookup[selectedTreemapItem.ticker]?.subComponents.map((sub: any, idx: number) => (
-                              <tr key={idx} className="hover:bg-slate-900/30 transition-colors">
-                                <td className="p-3 text-white font-sans font-medium">{sub.name}</td>
-                                <td className="p-3 text-center text-cyan-400 font-bold">{sub.share}</td>
-                                <td className="p-3 text-right">
-                                  <span className="px-2 py-0.5 rounded-full bg-emerald-950/40 text-emerald-400 border border-emerald-900/40 font-bold text-[9px]">
+                      <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1 scrollbar-thin">
+                        {treemapDetailsLookup[selectedTreemapItem.ticker]?.subComponents.map((sub: any, idx: number) => {
+                          const isExpanded = expandedSubComponent === sub.ticker;
+                          const hasSparkline = sub.sparkline && sub.sparkline.length > 0;
+                          return (
+                            <div 
+                              key={sub.ticker || idx}
+                              className={`border rounded-xl transition-all duration-300 overflow-hidden ${
+                                isExpanded 
+                                  ? 'border-cyan-500/50 bg-[#0e172a]/90 shadow-[0_0_15px_rgba(6,182,212,0.1)]' 
+                                  : 'border-slate-800/60 bg-[#05080e]/40 hover:bg-slate-900/30 hover:border-slate-700/60'
+                              }`}
+                            >
+                              {/* Summary Header */}
+                              <div 
+                                onClick={() => setExpandedSubComponent(isExpanded ? null : sub.ticker)}
+                                className="p-3 flex items-center justify-between gap-2 cursor-pointer select-none"
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <ArrowRight className={`w-3.5 h-3.5 text-cyan-400 shrink-0 transform transition-transform duration-300 ${isExpanded ? 'rotate-90 text-cyan-300' : ''}`} />
+                                  <div className="min-w-0">
+                                    <div className="text-[11px] font-bold text-white flex items-center gap-1.5 flex-wrap">
+                                      <span className="truncate">{sub.name}</span>
+                                      <span className="text-[9px] font-mono bg-slate-800 text-slate-400 px-1.5 py-0.2 rounded shrink-0">
+                                        {sub.ticker || `SUB.${idx}`}
+                                      </span>
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 font-mono mt-0.5 truncate">
+                                      {sub.operator || 'Operador Local'}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-3 shrink-0">
+                                  {/* Compact Sparkline preview */}
+                                  {hasSparkline && !isExpanded && (
+                                    <div className="opacity-70 group-hover:opacity-100 hidden sm:block">
+                                      <Sparkline data={sub.sparkline} change={sub.change || 0} />
+                                    </div>
+                                  )}
+                                  
+                                  <div className="text-right">
+                                    <div className="text-xs font-black text-cyan-400 font-mono">{sub.share}</div>
+                                    <div className="text-[9px] text-slate-500 font-mono">Fatia</div>
+                                  </div>
+
+                                  <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] font-mono ${
+                                    sub.status === 'Operacional' || sub.status === 'Crescendo'
+                                      ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-900/40'
+                                      : sub.status === 'Sazonal' || sub.status === 'Expansão'
+                                      ? 'bg-amber-950/40 text-amber-400 border border-amber-900/40'
+                                      : 'bg-slate-900 text-slate-400 border border-slate-800'
+                                  }`}>
                                     {sub.status}
                                   </span>
-                                </td>
-                              </tr>
-                            )) || (
-                              <tr>
-                                <td colSpan={3} className="p-3 text-center text-slate-500">Nenhum subsetor mapeado</td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
+                                </div>
+                              </div>
+
+                              {/* Expanded Deep-Dive Details */}
+                              {isExpanded && (
+                                <motion.div 
+                                  initial={{ height: 0, opacity: 0 }}
+                                  animate={{ height: 'auto', opacity: 1 }}
+                                  exit={{ height: 0, opacity: 0 }}
+                                  transition={{ duration: 0.25 }}
+                                  className="border-t border-slate-800/80 bg-[#070b14] px-4 py-3.5 space-y-3.5"
+                                >
+                                  {/* Sub-asset Mini Bento Grid */}
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] font-mono">
+                                    <div className="bg-[#0c1222] border border-slate-850 p-2 rounded-lg">
+                                      <span className="text-slate-500 block text-[9px] uppercase">Capacidade</span>
+                                      <span className="text-slate-200 font-bold">
+                                        {sub.size ? `${sub.size.toLocaleString('pt-BR')} MW` : 'N/A'}
+                                      </span>
+                                    </div>
+                                    <div className="bg-[#0c1222] border border-slate-850 p-2 rounded-lg">
+                                      <span className="text-slate-500 block text-[9px] uppercase">Flutuação</span>
+                                      <span className={`font-bold ${sub.change >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                        {sub.change >= 0 ? '+' : ''}{(sub.change || 0).toFixed(2)}%
+                                      </span>
+                                    </div>
+                                    <div className="bg-[#0c1222] border border-slate-850 p-2 rounded-lg col-span-2 sm:col-span-1">
+                                      <span className="text-slate-500 block text-[9px] uppercase">Localização</span>
+                                      <span className="text-slate-300 truncate block" title={sub.location}>
+                                        {sub.location || 'Brasil'}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Sparkline & Chart Label */}
+                                  {hasSparkline && (
+                                    <div className="bg-[#04060c] border border-slate-900 rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+                                      <div>
+                                        <span className="text-slate-500 block text-[9px] font-mono uppercase tracking-wider">Histórico de Geração Operacional</span>
+                                        <span className="text-[10px] text-slate-400 mt-0.5 block">Variação das últimas campanhas de medição ativa</span>
+                                      </div>
+                                      <div className="bg-slate-950/80 px-4 py-2.5 rounded-lg border border-slate-900 shrink-0 flex items-center justify-center">
+                                        <Sparkline data={sub.sparkline} change={sub.change || 0} />
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Description */}
+                                  {sub.description && (
+                                    <p className="text-xs text-slate-400 leading-relaxed bg-[#03050a] p-3 rounded-lg border border-slate-950">
+                                      {sub.description}
+                                    </p>
+                                  )}
+
+                                  {/* Sub-asset Challenges */}
+                                  {sub.challenges && sub.challenges.length > 0 && (
+                                    <div className="space-y-1.5">
+                                      <span className="text-[10px] text-slate-500 font-mono uppercase tracking-wider block">Gargalos Operativos Específicos</span>
+                                      <ul className="space-y-1">
+                                        {sub.challenges.map((chal: string, cIdx: number) => (
+                                          <li key={cIdx} className="text-[11px] text-slate-400 flex items-start gap-1.5 leading-normal">
+                                            <span className="text-rose-400 font-bold">•</span>
+                                            <span>{chal}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+
+                                  {/* Consult AI specifically for this plant */}
+                                  <div className="pt-1.5 flex justify-end">
+                                    <button
+                                      onClick={() => {
+                                        setShowTreemapDetailModal(false);
+                                        setActiveTab('ai');
+                                        setTimeout(() => {
+                                          handleSendChat(undefined, `Gostaria de uma análise detalhada regulatória e operacional da usina ou sistema "${sub.name}" (${sub.ticker}), localizado em ${sub.location || 'Brasil'} e operado por ${sub.operator || 'vários'}. Fale sobre a capacidade de ${sub.size} MW e discuta os desafios: ${sub.challenges ? sub.challenges.join(', ') : 'intermitência e custos de transmissão'}.`);
+                                        }, 100);
+                                      }}
+                                      className="bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 hover:border-cyan-500/50 text-cyan-400 font-bold px-3 py-1.5 rounded-lg text-[10px] flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                                    >
+                                      <MessageSquare className="w-3.5 h-3.5" />
+                                      Consultar IA sobre {sub.name.split(' ')[1] || 'este ativo'}
+                                    </button>
+                                  </div>
+                                </motion.div>
+                              )}
+                            </div>
+                          );
+                        }) || (
+                          <div className="text-center py-6 text-slate-500 text-xs font-mono">
+                            Nenhum subsetor mapeado
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
