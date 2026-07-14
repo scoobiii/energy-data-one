@@ -106,70 +106,130 @@ interface DBStats {
   total_tables: number;
 }
 
-// Custom styled Content renderer for the proportional load Treemap (ONS + MMGD)
+// Custom styled Content renderer for the proportional load Treemap (ONS + MMGD) - styled exactly like Finviz.com/map (dense flat grid, performance based color, tickers)
 const CustomTreemapContent = (props: any) => {
-  const { x, y, width, height, name, size, color } = props;
+  const { x, y, width, height, name, ticker, size, change, fullName } = props;
   
   if (typeof x !== 'number' || typeof y !== 'number' || typeof width !== 'number' || typeof height !== 'number') return null;
-  if (width < 35 || height < 20) return null;
-  
+  if (width < 32 || height < 16) return null;
+
+  // Finviz-accurate color scale based on % change (Vibrant green/red/dark shades)
+  const getFinvizColor = (val: number) => {
+    if (val >= 5) return '#00a334';        // Strong growth (Vibrant Green)
+    if (val >= 2) return '#006c21';        // Moderate growth (Medium-High Green)
+    if (val > 0) return '#004213';         // Light growth (Dark Green)
+    if (val === 0) return '#171e2e';       // Neutral/Flat (Dark Slate)
+    if (val >= -2) return '#4f0a0a';       // Light decay (Dark Red)
+    if (val >= -5) return '#820b0b';       // Moderate decay (Medium-High Red)
+    return '#ba0707';                      // Strong decay (Vibrant Red)
+  };
+
+  const bgColor = typeof change === 'number' ? getFinvizColor(change) : '#1e293b';
+  const displayChange = typeof change === 'number' ? `${change >= 0 ? '+' : ''}${change.toFixed(2)}%` : '0.00%';
   const safeSize = typeof size === 'number' ? size : 0;
-  const safeName = typeof name === 'string' ? name : 'Indefinido';
-  const displayColor = color || '#1e293b';
+  const formattedSize = safeSize >= 1000 ? `${(safeSize / 1000).toFixed(1)} GW` : `${safeSize.toLocaleString('pt-BR')} MW`;
+  const displayTicker = ticker || (name ? name.split(' ')[0].toUpperCase() : 'GD');
 
   return (
-    <g>
+    <g className="group select-none">
       <rect
         x={x}
         y={y}
         width={width}
         height={height}
         style={{
-          fill: displayColor,
-          stroke: '#090d16',
-          strokeWidth: 2.5,
-          strokeOpacity: 1,
+          fill: bgColor,
+          stroke: '#05080e',
+          strokeWidth: 1.5,
+          cursor: 'pointer'
         }}
-        rx={6}
-        ry={6}
+        className="transition-all duration-300 hover:brightness-[1.18]"
       />
-      {width > 70 && height > 35 ? (
-        <>
+      
+      {width > 80 && height > 45 ? (
+        <g className="pointer-events-none">
+          {/* Ticker / Source Symbol (Large bold white sans) */}
           <text
             x={x + width / 2}
-            y={y + height / 2 - 4}
+            y={y + height / 2 - 10}
             textAnchor="middle"
             fill="#ffffff"
-            fontSize={width > 120 ? 11 : 9}
-            fontWeight="bold"
-            className="select-none pointer-events-none"
+            fontSize={width > 130 ? 13 : 11}
+            fontWeight="900"
+            fontFamily="Inter, system-ui, sans-serif"
+            letterSpacing="-0.025em"
           >
-            {safeName}
+            {displayTicker}
+          </text>
+          
+          {/* Size / Capacity Value (Light grey Inter) */}
+          <text
+            x={x + width / 2}
+            y={y + height / 2 + 5}
+            textAnchor="middle"
+            fill="#cbd5e1"
+            fontSize={width > 130 ? 10 : 8.5}
+            fontWeight="600"
+            fontFamily="Inter, system-ui, sans-serif"
+          >
+            {formattedSize}
+          </text>
+
+          {/* Hourly dispatch change percentage (Finviz style color green/red indicator) */}
+          <text
+            x={x + width / 2}
+            y={y + height / 2 + 18}
+            textAnchor="middle"
+            fill={change >= 0 ? '#4ade80' : '#f87171'}
+            fontSize={width > 130 ? 10 : 8.5}
+            fontWeight="800"
+            fontFamily="JetBrains Mono, monospace"
+          >
+            {displayChange}
+          </text>
+        </g>
+      ) : width > 45 && height > 24 ? (
+        <g className="pointer-events-none">
+          {/* Smaller compact view for intermediate rectangles */}
+          <text
+            x={x + width / 2}
+            y={y + height / 2 - 2}
+            textAnchor="middle"
+            fill="#ffffff"
+            fontSize={9.5}
+            fontWeight="bold"
+            fontFamily="Inter, system-ui, sans-serif"
+          >
+            {displayTicker.split('.')[1] || displayTicker}
           </text>
           <text
             x={x + width / 2}
-            y={y + height / 2 + 10}
+            y={y + height / 2 + 9}
             textAnchor="middle"
-            fill="#a5f3fc"
-            fontSize={width > 120 ? 10 : 8}
-            fontWeight="600"
-            className="select-none pointer-events-none"
+            fill={change >= 0 ? '#4ade80' : '#f87171'}
+            fontSize={8}
+            fontWeight="bold"
+            fontFamily="JetBrains Mono, monospace"
           >
-            {safeSize >= 1000 ? `${(safeSize / 1000).toFixed(1)} GW` : `${safeSize.toLocaleString('pt-BR')} MW`}
+            {displayChange}
           </text>
-        </>
+        </g>
       ) : (
-        <text
-          x={x + width / 2}
-          y={y + height / 2 + 3}
-          textAnchor="middle"
-          fill="#ffffff"
-          fontSize={8}
-          fontWeight="bold"
-          className="select-none pointer-events-none"
-        >
-          {safeName ? safeName.split(' ')[0] : ''}
-        </text>
+        <g className="pointer-events-none">
+          {/* Micro layout for tiny rectangles */}
+          <text
+            x={x + width / 2}
+            y={y + height / 2 + 3}
+            textAnchor="middle"
+            fill="#ffffff"
+            fontSize={7.5}
+            fontWeight="800"
+            fontFamily="Inter, system-ui, sans-serif"
+            opacity={0.9}
+          >
+            {displayTicker.split('.')[1] || displayTicker.slice(0, 3)}
+          </text>
+        </g>
       )}
     </g>
   );
@@ -228,6 +288,9 @@ export default function App() {
   const [showReportModal, setShowReportModal] = useState<boolean>(false);
   const [reportText, setReportText] = useState<string>('');
   const [copiedReport, setCopiedReport] = useState<boolean>(false);
+
+  // Treemap Timeframe Selection: '1h' | '1d' | '1w' (Finviz Map Style)
+  const [mapTimeframe, setMapTimeframe] = useState<'1h' | '1d' | '1w'>('1h');
 
   // Uncaught errors public log state (Observability & Diagnostics)
   const [uncaughtErrors, setUncaughtErrors] = useState<{ time: string; level: 'WARNING' | 'CRITICAL' | 'INFO'; message: string; component: string }[]>([
@@ -652,18 +715,54 @@ MEx Energia BR • Tecnologia em Barramento 800VDC e Microrredes.
       ute += s.ute_mw;
     });
 
+    // Define change percentages based on timeframe (Finviz Style performance scale)
+    const timeframeChanges = {
+      '1h': {
+        'ONS.HIDR': 0.45,
+        'ONS.EOL': 3.80,
+        'ONS.TERM': -5.12,
+        'ONS.SOL': 8.40,
+        'GD.SOLAR': 11.20,
+        'GD.TERM': -1.80,
+        'GD.CGH': 0.12,
+        'GD.EOL': 2.30,
+      },
+      '1d': {
+        'ONS.HIDR': -1.20,
+        'ONS.EOL': 12.45,
+        'ONS.TERM': 4.10,
+        'ONS.SOL': -2.30,
+        'GD.SOLAR': -3.50,
+        'GD.TERM': 1.15,
+        'GD.CGH': 0.85,
+        'GD.EOL': 9.80,
+      },
+      '1w': {
+        'ONS.HIDR': 0.00,
+        'ONS.EOL': 0.15,
+        'ONS.TERM': -0.10,
+        'ONS.SOL': 0.42,
+        'GD.SOLAR': 3.15,
+        'GD.TERM': 0.05,
+        'GD.CGH': 0.02,
+        'GD.EOL': 0.80,
+      }
+    };
+
+    const activeChanges = timeframeChanges[mapTimeframe] || timeframeChanges['1h'];
+
     return [
-      { name: 'Hidrelétrica Central (ONS SIN)', size: 68000, category: 'Centralizada', color: '#1e40af' },
-      { name: 'Eólica Central (ONS SIN)', size: 16000, category: 'Centralizada', color: '#0e7490' },
-      { name: 'Térmica Central (ONS SIN)', size: 10000, category: 'Centralizada', color: '#9a3412' },
-      { name: 'Solar Central (ONS SIN)', size: 8000, category: 'Centralizada', color: '#854d0e' },
+      { name: 'Hidrelétrica Central (ONS SIN)', ticker: 'ONS.HIDR', size: 68000, category: 'Centralizada', change: activeChanges['ONS.HIDR'], fullName: 'Hidrelétrica Central ONS' },
+      { name: 'Eólica Central (ONS SIN)', ticker: 'ONS.EOL', size: 16000, category: 'Centralizada', change: activeChanges['ONS.EOL'], fullName: 'Eólica Central ONS' },
+      { name: 'Térmica Central (ONS SIN)', ticker: 'ONS.TERM', size: 10000, category: 'Centralizada', change: activeChanges['ONS.TERM'], fullName: 'Térmica Central ONS' },
+      { name: 'Solar Central (ONS SIN)', ticker: 'ONS.SOL', size: 8000, category: 'Centralizada', change: activeChanges['ONS.SOL'], fullName: 'Solar Central ONS' },
       
-      { name: 'Solar MMGD', size: Number(ufv.toFixed(0)), category: 'MMGD', color: '#eab308' },
-      { name: 'Térmica MMGD', size: Number(ute.toFixed(0)), category: 'MMGD', color: '#f97316' },
-      { name: 'Hidro CGH MMGD', size: Number(cgh.toFixed(0)), category: 'MMGD', color: '#2563eb' },
-      { name: 'Eólica MMGD', size: Number(eol.toFixed(0)), category: 'MMGD', color: '#06b6d4' },
+      { name: 'Solar MMGD', ticker: 'GD.SOLAR', size: Number(ufv.toFixed(0)), category: 'MMGD', change: activeChanges['GD.SOLAR'], fullName: 'Geração Distribuída Solar' },
+      { name: 'Térmica MMGD', ticker: 'GD.TERM', size: Number(ute.toFixed(0)), category: 'MMGD', change: activeChanges['GD.TERM'], fullName: 'Geração Distribuída Térmica' },
+      { name: 'Hidro CGH MMGD', ticker: 'GD.CGH', size: Number(cgh.toFixed(0)), category: 'MMGD', change: activeChanges['GD.CGH'], fullName: 'Geração Distribuída Central Hidrelétrica' },
+      { name: 'Eólica MMGD', ticker: 'GD.EOL', size: Number(eol.toFixed(0)), category: 'MMGD', change: activeChanges['GD.EOL'], fullName: 'Geração Distribuída Eólica' },
     ];
-  }, [ufStats]);
+  }, [ufStats, mapTimeframe]);
 
   return (
     <div className="min-h-screen bg-[#090d16] text-[#e2e8f0] font-sans antialiased relative selection:bg-cyan-500 selection:text-black">
@@ -839,73 +938,114 @@ MEx Energia BR • Tecnologia em Barramento 800VDC e Microrredes.
               className="space-y-6"
             >
 
-              {/* ONS Centralized and MMGD Proportional Load Treemap */}
-              <div className="bg-[#0c1222] border border-slate-800 rounded-xl p-5">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+              {/* ONS Centralized and MMGD Proportional Load Treemap - Finviz Style */}
+              <div className="bg-[#0b0f19] border border-slate-800 rounded-xl p-5 shadow-2xl">
+                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-5 pb-4 border-b border-slate-800/80">
                   <div>
-                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                      <BarChart3 className="w-5 h-5 text-yellow-400" />
-                      Treemap de Capacidade Proporcional à Carga (Brasil)
-                    </h2>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      Visão unificada das Fontes ONS Centralizadas e MMGD. O tamanho de cada área é estritamente proporcional à carga instalada (MW).
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 bg-emerald-500 animate-pulse rounded-full" />
+                      <h2 className="text-base font-extrabold text-white tracking-tight uppercase font-sans">
+                        Mapa de Calor de Capacidade & Performance (Estilo Finviz)
+                      </h2>
+                    </div>
+                    <p className="text-[11px] text-[#94a3b8] mt-1 font-mono">
+                      Área total = Capacidade Operacional (MW) • Cor do Bloco = Variação de Despacho & Crescimento GD (st={mapTimeframe})
                     </p>
                   </div>
-                  <span className="bg-yellow-500/10 text-yellow-400 font-bold px-3 py-1 border border-yellow-500/20 rounded-xl text-xs flex items-center gap-1.5 shrink-0 animate-pulse">
-                    <span className="w-2 h-2 rounded-full bg-yellow-400" />
-                    Proporcionalidade Ativa
-                  </span>
+                  
+                  {/* Timeframe selector (st=1h, st=1d, st=1w) */}
+                  <div className="flex items-center gap-2 bg-[#060911] border border-slate-800 rounded-lg p-1 shrink-0 font-mono text-[10px]">
+                    <span className="text-slate-500 font-bold px-2 uppercase">Timeframe (st):</span>
+                    <button
+                      type="button"
+                      onClick={() => setMapTimeframe('1h')}
+                      className={`px-3 py-1 rounded font-extrabold cursor-pointer transition-all ${
+                        mapTimeframe === '1h'
+                          ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-black shadow-md shadow-emerald-500/10'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                      }`}
+                    >
+                      1H (Despacho)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMapTimeframe('1d')}
+                      className={`px-3 py-1 rounded font-extrabold cursor-pointer transition-all ${
+                        mapTimeframe === '1d'
+                          ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-black shadow-md shadow-emerald-500/10'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                      }`}
+                    >
+                      1D (Diário)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMapTimeframe('1w')}
+                      className={`px-3 py-1 rounded font-extrabold cursor-pointer transition-all ${
+                        mapTimeframe === '1w'
+                          ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-black shadow-md shadow-emerald-500/10'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                      }`}
+                    >
+                      1W (Semanal)
+                    </button>
+                  </div>
                 </div>
 
-                <div className="h-72">
+                {/* Dense Treemap Container */}
+                <div className="h-80 bg-[#05080e] border border-slate-900/80 p-0.5 rounded overflow-hidden relative">
                   <ResponsiveContainer width="100%" height="100%">
                     <Treemap
                       data={treemapData}
                       dataKey="size"
-                      stroke="#090d16"
-                      fill="#8884d8"
+                      stroke="#05080e"
+                      fill="#121722"
                       content={<CustomTreemapContent />}
                     >
                       <Tooltip
-                        contentStyle={{ backgroundColor: '#0c1222', borderColor: '#334155', color: '#f8fafc' }}
-                        formatter={(value, name) => [`${Number(value).toLocaleString('pt-BR')} MW`, name]}
+                        contentStyle={{ 
+                          backgroundColor: '#0c1222', 
+                          borderColor: '#1e293b', 
+                          borderRadius: '8px',
+                          color: '#f8fafc',
+                          fontFamily: 'JetBrains Mono, monospace',
+                          fontSize: '11px'
+                        }}
+                        formatter={(value, name, item) => {
+                          const payload = item?.payload || {};
+                          const displayChange = typeof payload.change === 'number' ? `${payload.change >= 0 ? '+' : ''}${payload.change.toFixed(2)}%` : '0.00%';
+                          return [
+                            <div className="space-y-1">
+                              <div className="font-sans font-bold text-slate-100">{payload.fullName || name}</div>
+                              <div className="text-yellow-400">Potência: <strong className="text-white">{Number(value).toLocaleString('pt-BR')} MW</strong></div>
+                              <div className={payload.change >= 0 ? 'text-emerald-400' : 'text-rose-400'}>Variabilidade ({mapTimeframe}): <strong>{displayChange}</strong></div>
+                              <div className="text-slate-400 text-[10px]">Segmento: {payload.category}</div>
+                            </div>,
+                            null
+                          ];
+                        }}
                       />
                     </Treemap>
                   </ResponsiveContainer>
                 </div>
                 
-                <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-4 pt-3 border-t border-slate-800/60 text-xs">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 bg-[#1e40af] rounded animate-pulse" />
-                    <span className="text-slate-400">Hidro (Central ONS)</span>
+                {/* Finviz style gradient and label footer */}
+                <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 mt-5 pt-4 border-t border-slate-800/80 text-[10px] font-mono">
+                  {/* Legend Map Tickers Mapping */}
+                  <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-slate-400 shrink-0">
+                    <span className="font-extrabold text-slate-300">Tickers de Energia:</span>
+                    <span className="hover:text-white transition-colors">⚡ ONS.HIDR (Hidro SIN)</span>
+                    <span className="hover:text-white transition-colors">💨 ONS.EOL (Eólica SIN)</span>
+                    <span className="hover:text-white transition-colors">🔥 ONS.TERM (Térmica SIN)</span>
+                    <span className="hover:text-white transition-colors">☀️ ONS.SOL (Solar SIN)</span>
+                    <span className="hover:text-white transition-colors">☀️ GD.SOLAR (Geração Distribuída)</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 bg-[#0e7490] rounded" />
-                    <span className="text-slate-400">Eólica (Central ONS)</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 bg-[#9a3412] rounded" />
-                    <span className="text-slate-400">Térmica (Central ONS)</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 bg-[#854d0e] rounded" />
-                    <span className="text-slate-400">Solar (Central ONS)</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 bg-[#eab308] rounded animate-pulse" />
-                    <span className="text-slate-400">Solar MMGD</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 bg-[#f97316] rounded" />
-                    <span className="text-slate-400">Térmica MMGD</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 bg-[#2563eb] rounded" />
-                    <span className="text-slate-400">CGH MMGD</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 bg-[#06b6d4] rounded" />
-                    <span className="text-slate-400">Eólica MMGD</span>
+
+                  {/* Finviz-style linear color bar */}
+                  <div className="flex items-center gap-2 max-w-sm w-full md:w-64 self-end md:self-auto">
+                    <span className="text-rose-500 font-extrabold shrink-0">-5%</span>
+                    <div className="flex-1 h-3 rounded border border-slate-800 overflow-hidden flex bg-gradient-to-r from-[#ba0707] via-[#820b0b] via-[#4f0a0a] via-[#171e2e] via-[#004213] via-[#006c21] to-[#00a334]" />
+                    <span className="text-emerald-500 font-extrabold shrink-0">+5%</span>
                   </div>
                 </div>
               </div>
