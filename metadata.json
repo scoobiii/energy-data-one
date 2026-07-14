@@ -1,0 +1,6 @@
+{
+  "name": "Brazilian Energy Data Dashboard",
+  "description": "Interactive dashboard, regulatory rules calculator (Lei 14.300/2022), and Gemini AI energy assistant for ANEEL MMGD, SIGA, and ONS open data.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
