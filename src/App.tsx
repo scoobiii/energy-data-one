@@ -24,7 +24,11 @@ import {
   BarChart3,
   ListFilter,
   ShieldCheck,
-  FileText
+  FileText,
+  Copy,
+  X,
+  Download,
+  Check
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -214,6 +218,11 @@ export default function App() {
   const [triggeringCron, setTriggeringCron] = useState<boolean>(false);
   const [fallbackRAG, setFallbackRAG] = useState<boolean>(false);
 
+  // PDF Text Report states
+  const [showReportModal, setShowReportModal] = useState<boolean>(false);
+  const [reportText, setReportText] = useState<string>('');
+  const [copiedReport, setCopiedReport] = useState<boolean>(false);
+
   // Calculator state
   const [calcInputs, setCalcInputs] = useState({
     potenciaKw: 250,
@@ -348,6 +357,111 @@ export default function App() {
     } finally {
       setCalculating(false);
     }
+  };
+
+  // Generate formatted text report for copy and download
+  const handleGenerateReport = () => {
+    if (!calcResults) return;
+
+    const formattedDate = new Date().toLocaleString('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      dateStyle: 'long',
+      timeStyle: 'medium'
+    });
+
+    const isRemotoAcima500 = calcResults.isMinigeracaoAcima500kW;
+    const yearComp = calcInputs.connectionYear;
+    
+    let fonteExt = 'Solar Fotovoltaica (UFV)';
+    if (calcInputs.fonteNorm === 'EOL') fonteExt = 'Eólica (EOL)';
+    if (calcInputs.fonteNorm === 'CGH') fonteExt = 'Central Geradora Hidrelétrica (CGH)';
+    if (calcInputs.fonteNorm === 'UTE') fonteExt = 'Térmica / Biogás (UTE)';
+
+    let modExt = 'Geração Própria / Autoconsumo Local';
+    if (calcInputs.modalidadeNorm === 'AUTOCONSUMO_REMOTO') modExt = 'Autoconsumo Remoto';
+    if (calcInputs.modalidadeNorm === 'GERACAO_COMPARTILHADA') modExt = 'Geração Compartilhada';
+    if (calcInputs.modalidadeNorm === 'EMUC') modExt = 'EMUC (Múltiplos Consumidores)';
+
+    const text = `======================================================================
+                 MEx ENERGIA - RELATÓRIO DE SIMULAÇÃO REGULATÓRIA
+                         MARCO LEGAL DE GD (LEI 14.300/2022)
+======================================================================
+Data/Hora de Emissão : ${formattedDate}
+Local de Referência  : Fuso Horário de Brasília (UTC-3)
+Sistema Gerador      : MEx Energy Data Analytics Platform
+
+----------------------------------------------------------------------
+1. IDENTIFICAÇÃO DO EMPREENDIMENTO SIMULADO
+----------------------------------------------------------------------
+Potência do Projeto  : ${calcInputs.potenciaKw} kW
+Fonte Primária       : ${fonteExt}
+Modalidade de Proj.  : ${modExt}
+Ano da Conexão       : ${yearComp === 2022 ? 'Até 2022 (Direito Adquirido GD1)' : yearComp === 2029 ? 'A partir de 2029 (GD2 Integral)' : `${yearComp} (Transição GD2)`}
+
+----------------------------------------------------------------------
+2. ENQUADRAMENTO E PARECER REGULATÓRIO ANEEL
+----------------------------------------------------------------------
+Faixa Regulatória    : ${calcResults.faixaRegulatoria}
+Cobrança TUSD Fio B  : ${calcResults.fioBPercentage}% da TUSD Fio B (Compensação reduzida)
+Regra de Transição   : ${
+      yearComp === 2022 
+        ? 'GD1 (Isenção total até 2045 - Direito adquirido)' 
+        : isRemotoAcima500 
+          ? 'SEM TRANSIÇÃO GRADUAL. Sujeito a 100% de Fio B e 40% de Fio A imediatos (Art. 26).'
+          : `Cobrança gradual escalonada (${calcResults.fioBPercentage}% da TUSD Fio B em ${yearComp})`
+    }
+Alerta Artigo 26     : ${isRemotoAcima500 ? 'SIM • Minigeração > 500 kW Autoconsumo Remoto (100% de cobrança de TUSD Fio B)' : 'Não aplicável (Regras padrão de micro/minigeração com transição)'}
+
+----------------------------------------------------------------------
+3. ANÁLISE DE PAYBACK E VIABILIDADE TÉCNICA-ECONÔMICA
+----------------------------------------------------------------------
+Retorno Estimado     : ${calcResults.paybackYearsEstimated} Anos (Payback)
+Viabilidade BESS MEx : ${calcResults.bessViabilityScore}% (Grau de adequação tecnológica)
+Adequação Tecnológica: ${
+      calcResults.bessViabilityScore >= 70 
+        ? 'ALTAMENTE RECOMENDADO para armazenamento nativo industrial BESS MEx (800VDC).' 
+        : calcResults.bessViabilityScore >= 40
+          ? 'RECOMENDAÇÃO MODERADA. Requer otimização da curva de carga por peak shaving.'
+          : 'BAIXO APELO FINANCEIRO para baterias modulares comerciais no momento.'
+    }
+
+----------------------------------------------------------------------
+4. PARECER ESTRATÉGICO MEx ENERGIA (SUMÁRIO OPERACIONAL)
+----------------------------------------------------------------------
+${calcResults.recommendation}
+
+----------------------------------------------------------------------
+Relatório gerado automaticamente para fins informativos e de pré-projeto.
+MEx Energia BR • Tecnologia em Barramento 800VDC e Microrredes.
+======================================================================`;
+
+    setReportText(text);
+    setCopiedReport(false);
+    setShowReportModal(true);
+  };
+
+  // Copy formatted report text to clipboard
+  const handleCopyReport = async () => {
+    try {
+      await navigator.clipboard.writeText(reportText);
+      setCopiedReport(true);
+      setTimeout(() => setCopiedReport(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy', err);
+    }
+  };
+
+  // Download formatted report text as .txt file
+  const handleDownloadReport = () => {
+    const blob = new Blob([reportText], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `relatorio_mex_lei14300_${calcInputs.potenciaKw}kw.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   // Run simulated SQL query
@@ -1709,14 +1823,22 @@ export default function App() {
                         </p>
                       </div>
 
-                      {/* Chat trigger */}
-                      <div className="flex justify-end pt-2">
+                      {/* Chat trigger & Export report */}
+                      <div className="flex flex-col sm:flex-row justify-end items-center gap-3 pt-2">
+                        <button
+                          onClick={handleGenerateReport}
+                          className="w-full sm:w-auto bg-gradient-to-r from-yellow-500/10 to-amber-500/10 hover:from-yellow-500/20 hover:to-amber-500/20 border border-yellow-500/30 hover:border-yellow-500/50 text-yellow-400 font-bold px-4 py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm shadow-yellow-500/5"
+                        >
+                          <FileText className="w-4 h-4" />
+                          Exportar Relatório PDF
+                        </button>
+
                         <button
                           onClick={() => {
                             setActiveTab('ai');
                             handleSendChat(undefined, `Me dê detalhes de viabilidade e simulação para um projeto de ${calcInputs.potenciaKw} kW de fonte ${calcInputs.fonteNorm} na modalidade ${calcInputs.modalidadeNorm} conectado no ano ${calcInputs.connectionYear}.`);
                           }}
-                          className="bg-slate-900 border border-slate-800 text-cyan-400 hover:text-cyan-300 font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer group"
+                          className="w-full sm:w-auto bg-slate-900 border border-slate-800 text-cyan-400 hover:text-cyan-300 hover:border-slate-700 font-bold px-4 py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer group"
                         >
                           <MessageSquare className="w-4 h-4" />
                           Aprofundar Análise com Gemini
@@ -1871,6 +1993,100 @@ export default function App() {
         </AnimatePresence>
 
       </main>
+
+      {/* Simulation Text Report Modal */}
+      <AnimatePresence>
+        {showReportModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowReportModal(false)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            />
+            
+            {/* Modal Box */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: 'spring', duration: 0.4 }}
+              className="relative w-full max-w-2xl bg-[#0c1222] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh] z-10"
+            >
+              {/* Header */}
+              <div className="bg-[#11192e] border-b border-slate-800 px-6 py-4 flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-yellow-400" />
+                  <div>
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Exportar Relatório Simulado</h3>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Resumo de enquadramento da Lei 14.300/2022 formatado para cópia.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowReportModal(false)}
+                  className="text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded-lg transition-all cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 overflow-y-auto space-y-4 flex-1">
+                <p className="text-xs text-slate-300">
+                  Os resultados foram gerados com base nas regras de transição da Geração Distribuída (GD) brasileira. Copie o resumo formatado abaixo ou salve o arquivo de texto para arquivamento.
+                </p>
+
+                {/* Textbox containing the report */}
+                <div className="relative group">
+                  <textarea
+                    readOnly
+                    value={reportText}
+                    className="w-full h-80 bg-[#05080e] font-mono text-xs text-cyan-300 border border-slate-800 rounded-xl p-4 focus:outline-none focus:border-slate-700 resize-none select-all scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-slate-950"
+                  />
+                  <div className="absolute top-3 right-3 bg-[#0c1222]/80 border border-slate-800 rounded-md px-2 py-1 text-[10px] text-slate-500 font-mono pointer-events-none group-hover:text-slate-400 transition-colors">
+                    UTF-8 • TXT
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="bg-[#11192e] border-t border-slate-800 px-6 py-4 flex flex-col sm:flex-row gap-3 justify-between items-center shrink-0">
+                <div className="text-[10px] text-slate-500 font-mono">
+                  MEx Energia Agent v1.4.0 • América/São_Paulo
+                </div>
+                
+                <div className="flex gap-2 w-full sm:w-auto">
+                  <button
+                    onClick={handleDownloadReport}
+                    className="flex-1 sm:flex-none bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 font-bold px-4 py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    Baixar Arquivo
+                  </button>
+                  <button
+                    onClick={handleCopyReport}
+                    className="flex-1 sm:flex-none bg-gradient-to-r from-cyan-400 to-blue-500 text-black font-extrabold px-5 py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all hover:opacity-95 cursor-pointer active:scale-[0.98]"
+                  >
+                    {copiedReport ? (
+                      <>
+                        <Check className="w-4 h-4 stroke-[3px]" />
+                        Copiado!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4" />
+                        Copiar Relatório
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* FOOTER */}
       <footer className="border-t border-slate-800 mt-16 bg-[#060911] text-xs text-[#94a3b8] py-8">
