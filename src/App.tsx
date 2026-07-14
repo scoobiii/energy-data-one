@@ -28,7 +28,8 @@ import {
   Copy,
   X,
   Download,
-  Check
+  Check,
+  AlertTriangle
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -109,8 +110,13 @@ interface DBStats {
 const CustomTreemapContent = (props: any) => {
   const { x, y, width, height, name, size, color } = props;
   
+  if (typeof x !== 'number' || typeof y !== 'number' || typeof width !== 'number' || typeof height !== 'number') return null;
   if (width < 35 || height < 20) return null;
   
+  const safeSize = typeof size === 'number' ? size : 0;
+  const safeName = typeof name === 'string' ? name : 'Indefinido';
+  const displayColor = color || '#1e293b';
+
   return (
     <g>
       <rect
@@ -119,7 +125,7 @@ const CustomTreemapContent = (props: any) => {
         width={width}
         height={height}
         style={{
-          fill: color || '#1e293b',
+          fill: displayColor,
           stroke: '#090d16',
           strokeWidth: 2.5,
           strokeOpacity: 1,
@@ -138,7 +144,7 @@ const CustomTreemapContent = (props: any) => {
             fontWeight="bold"
             className="select-none pointer-events-none"
           >
-            {name}
+            {safeName}
           </text>
           <text
             x={x + width / 2}
@@ -149,7 +155,7 @@ const CustomTreemapContent = (props: any) => {
             fontWeight="600"
             className="select-none pointer-events-none"
           >
-            {size >= 1000 ? `${(size / 1000).toFixed(1)} GW` : `${size.toLocaleString('pt-BR')} MW`}
+            {safeSize >= 1000 ? `${(safeSize / 1000).toFixed(1)} GW` : `${safeSize.toLocaleString('pt-BR')} MW`}
           </text>
         </>
       ) : (
@@ -162,7 +168,7 @@ const CustomTreemapContent = (props: any) => {
           fontWeight="bold"
           className="select-none pointer-events-none"
         >
-          {name.split(' ')[0]}
+          {safeName ? safeName.split(' ')[0] : ''}
         </text>
       )}
     </g>
@@ -222,6 +228,12 @@ export default function App() {
   const [showReportModal, setShowReportModal] = useState<boolean>(false);
   const [reportText, setReportText] = useState<string>('');
   const [copiedReport, setCopiedReport] = useState<boolean>(false);
+
+  // Uncaught errors public log state (Observability & Diagnostics)
+  const [uncaughtErrors, setUncaughtErrors] = useState<{ time: string; level: 'WARNING' | 'CRITICAL' | 'INFO'; message: string; component: string }[]>([
+    { time: new Date().toLocaleTimeString('pt-BR'), level: 'INFO', message: 'MEx Observability Daemon inicializado com sucesso.', component: 'System Core' },
+    { time: new Date().toLocaleTimeString('pt-BR'), level: 'WARNING', message: 'Conexão HMR WebSocket recusada (Comportamento esperado devido a restrições de sandbox do iframe).', component: 'Vite Development Server' }
+  ]);
 
   // Calculator state
   const [calcInputs, setCalcInputs] = useState({
@@ -560,13 +572,34 @@ MEx Energia BR • Tecnologia em Barramento 800VDC e Microrredes.
     }
   };
 
-  // Run initial state fetches
+  // Run initial state fetches and register global observability listeners
   useEffect(() => {
     fetchStatsAndUF();
     fetchONSCurves();
     fetchDBAndRunQuery();
     handleCalculate();
     fetchDiagnostics();
+
+    // Intercept uncaught exceptions and render failures to register in our Public Failure Log
+    const handleRuntimeError = (event: ErrorEvent) => {
+      const errorMsg = event.message || 'Erro de execução desconhecido.';
+      const rawFile = event.filename ? event.filename.split('/').pop() : 'App.tsx';
+      const fileContext = rawFile ? rawFile.split('?')[0] : 'App.tsx';
+      setUncaughtErrors(prev => [
+        {
+          time: new Date().toLocaleTimeString('pt-BR'),
+          level: 'CRITICAL',
+          message: errorMsg,
+          component: `Runtime Exception (${fileContext}:${event.lineno || 0}:${event.colno || 0})`
+        },
+        ...prev.slice(0, 8)
+      ]);
+    };
+
+    window.addEventListener('error', handleRuntimeError);
+    return () => {
+      window.removeEventListener('error', handleRuntimeError);
+    };
   }, []);
 
   // Auto scroll chat
@@ -1548,12 +1581,12 @@ MEx Energia BR • Tecnologia em Barramento 800VDC e Microrredes.
                   <div className="bg-[#0c1222] border border-slate-800/80 p-4 rounded-xl">
                     <span className="text-[10px] text-cyan-400 font-extrabold uppercase tracking-wider block mb-1">Consumo de Memória RAM</span>
                     <div className="text-2xl font-bold text-white mt-1">
-                      {diagnostics ? `${diagnostics.performance.memory_ram_mb.toFixed(1)}` : '...'} <span className="text-xs font-normal text-slate-400">MB</span>
+                      {diagnostics?.ram_consumption ? `${diagnostics.ram_consumption.heap_used_mb.toFixed(1)}` : '...'} <span className="text-xs font-normal text-slate-400">MB</span>
                     </div>
                     <div className="w-full bg-slate-800 h-1.5 rounded-full mt-3 overflow-hidden">
                       <div 
                         className="bg-cyan-500 h-full rounded-full transition-all duration-500" 
-                        style={{ width: `${diagnostics ? Math.min(100, (diagnostics.performance.memory_ram_mb / 250) * 100) : 15}%` }}
+                        style={{ width: `${diagnostics?.ram_consumption ? Math.min(100, (diagnostics.ram_consumption.heap_used_mb / 250) * 100) : 15}%` }}
                       />
                     </div>
                     <div className="flex justify-between items-center text-[10px] text-slate-500 mt-1.5 font-mono">
@@ -1566,14 +1599,14 @@ MEx Energia BR • Tecnologia em Barramento 800VDC e Microrredes.
                   <div className="bg-[#0c1222] border border-slate-800/80 p-4 rounded-xl">
                     <span className="text-[10px] text-yellow-400 font-extrabold uppercase tracking-wider block mb-1">Tamanho & Tipo de Banco</span>
                     <div className="text-2xl font-bold text-white mt-1">
-                      {diagnostics ? `${diagnostics.persistence.sqlite_real_size_kb.toFixed(1)}` : '...'} <span className="text-xs font-normal text-slate-400">KB</span>
+                      {diagnostics?.database ? `${diagnostics.database.database_size_kb.toFixed(1)}` : '...'} <span className="text-xs font-normal text-slate-400">KB</span>
                     </div>
                     <span className="text-[10px] text-slate-400 font-mono mt-2 block">
-                      Engine: <strong className="text-yellow-400">{diagnostics ? diagnostics.persistence.engine : 'SQLite3 Simulada'}</strong>
+                      Engine: <strong className="text-yellow-400">{diagnostics?.database?.engine || 'SQLite3 Simulada'}</strong>
                     </span>
                     <div className="flex justify-between items-center text-[10px] text-slate-500 mt-1 font-mono">
-                      <span>Usinas Gravadas:</span>
-                      <span>{diagnostics ? diagnostics.persistence.mmgd_fato_rows : '...'} rows</span>
+                      <span>Usinas Fato Gravadas:</span>
+                      <span>{diagnostics?.database ? diagnostics.database.fato_records_count : '...'} rows</span>
                     </div>
                   </div>
 
@@ -1586,7 +1619,7 @@ MEx Energia BR • Tecnologia em Barramento 800VDC e Microrredes.
                         <span className="text-sm font-bold text-white">Sincronizado (NTP)</span>
                       </div>
                       <p className="text-[10px] text-slate-400 font-mono mt-1.5">
-                        Servidor: <span className="text-[#a5f3fc]">{diagnostics ? diagnostics.time_sync.utc_time_brasilia : '...'}</span>
+                        Servidor: <span className="text-[#a5f3fc]">{diagnostics?.time_sync ? diagnostics.time_sync.brazil_current_time : '...'}</span>
                       </p>
                       <p className="text-[10px] text-slate-400 font-mono">
                         Dispositivo A23: <span className="text-emerald-400">{new Date().toLocaleTimeString('pt-BR')}</span>
@@ -1602,10 +1635,10 @@ MEx Energia BR • Tecnologia em Barramento 800VDC e Microrredes.
                     <div>
                       <span className="text-[10px] text-[#f97316] font-extrabold uppercase tracking-wider block mb-1">Automação Cron Horária</span>
                       <div className="text-xs text-slate-300 font-mono">
-                        Status: <strong className="text-emerald-400">{diagnostics ? diagnostics.cron_automation.status : 'Ativo'}</strong>
+                        Status: <strong className="text-emerald-400">Ativo (Auto)</strong>
                       </div>
                       <div className="text-[9px] text-slate-400 font-mono mt-1">
-                        Agendado: <span className="text-yellow-400">{diagnostics ? diagnostics.cron_automation.cron_frequency : '...'}</span>
+                        Agendado: <span className="text-yellow-400">{diagnostics?.cron_automation?.active_schedules?.[0]?.cron || '0 * * * *'}</span>
                       </div>
                     </div>
 
@@ -1630,25 +1663,96 @@ MEx Energia BR • Tecnologia em Barramento 800VDC e Microrredes.
                   </div>
                 </div>
 
-                {/* Audit terminal logs */}
-                <div className="mt-4 bg-[#080d16] border border-slate-800/90 rounded-xl p-4">
-                  <div className="flex justify-between items-center mb-2.5">
-                    <span className="text-xs text-slate-300 font-bold flex items-center gap-1.5 font-mono">
-                      <span className="w-2 h-2 rounded-full bg-yellow-400 animate-ping" />
-                      Logs de Execução da Automação (Cron Executions)
-                    </span>
-                    <span className="text-[10px] text-slate-500 font-mono">Padrão Brasil (UTC-3)</span>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+                  {/* Audit terminal logs */}
+                  <div className="bg-[#080d16] border border-slate-800/90 rounded-xl p-4 flex flex-col justify-between">
+                    <div>
+                      <div className="flex justify-between items-center mb-2.5">
+                        <span className="text-xs text-slate-300 font-bold flex items-center gap-1.5 font-mono">
+                          <span className="w-2 h-2 rounded-full bg-yellow-400 animate-ping" />
+                          Logs de Execução da Automação (Cron Executions)
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono">Padrão Brasil (UTC-3)</span>
+                      </div>
+                      <div className="bg-[#05080e] font-mono text-[11px] text-cyan-400/90 p-3 rounded-lg max-h-48 overflow-y-auto space-y-1.5 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-slate-950">
+                        {diagnostics?.cron_automation?.cron_history && diagnostics.cron_automation.cron_history.length > 0 ? (
+                          diagnostics.cron_automation.cron_history.map((logItem: any, idx: number) => {
+                            const timeStr = logItem.timestamp ? new Date(logItem.timestamp).toLocaleTimeString('pt-BR') : '';
+                            return (
+                              <div key={idx} className="border-l-2 border-cyan-500/30 pl-2 py-0.5 hover:bg-cyan-950/20 flex flex-col gap-0.5">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-slate-500 font-bold">[{timeStr}]</span>
+                                  <span className="text-yellow-400 font-semibold">{logItem.action}</span>
+                                  <span className={`font-mono text-[9px] px-1 rounded font-bold ${logItem.status === 'SUCCESS' ? 'bg-emerald-950/80 text-emerald-400' : 'bg-rose-950/80 text-rose-400'}`}>{logItem.status}</span>
+                                </div>
+                                <span className="text-slate-300 pl-1">{logItem.details}</span>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="text-slate-500 italic">Nenhum log registrado ainda. Dispare os simulações de carga de dados acima para gerar evidências.</div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="bg-[#05080e] font-mono text-[11px] text-cyan-400/90 p-3 rounded-lg max-h-40 overflow-y-auto space-y-1.5 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-slate-950">
-                    {diagnostics && diagnostics.cron_automation.cron_logs.length > 0 ? (
-                      diagnostics.cron_automation.cron_logs.map((log: string, idx: number) => (
-                        <div key={idx} className="border-l-2 border-cyan-500/30 pl-2 py-0.5 hover:bg-cyan-950/20">
-                          {log}
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-slate-500 italic">Nenhum log registrado ainda. Dispare os simulações de carga de dados acima para gerar evidências.</div>
-                    )}
+
+                  {/* Public Failure Log bento card */}
+                  <div className="bg-[#080d16] border border-rose-950/50 rounded-xl p-4 flex flex-col justify-between">
+                    <div>
+                      <div className="flex justify-between items-center mb-2.5">
+                        <span className="text-xs text-rose-300 font-bold flex items-center gap-1.5 font-mono">
+                          <AlertTriangle className="w-4 h-4 text-rose-400 animate-pulse" />
+                          Painel Público de Falhas e Erros (Observability Logs)
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono">Monitor de Runtime</span>
+                      </div>
+                      
+                      <div className="bg-[#05080e] font-mono text-[11px] p-3 rounded-lg max-h-48 overflow-y-auto space-y-1.5 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-slate-950">
+                        {uncaughtErrors.map((err, idx) => (
+                          <div key={idx} className={`border-l-2 pl-2 py-0.5 flex flex-col gap-0.5 ${err.level === 'CRITICAL' ? 'border-rose-500/40 hover:bg-rose-950/10' : 'border-amber-500/40 hover:bg-amber-950/10'}`}>
+                            <div className="flex items-center justify-between gap-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-slate-500 font-bold">[{err.time}]</span>
+                                <span className={`text-[9px] px-1 rounded font-bold ${err.level === 'CRITICAL' ? 'bg-rose-950 text-rose-400' : 'bg-amber-950 text-amber-400'}`}>{err.level}</span>
+                                <span className="text-slate-400 font-medium">{err.component}</span>
+                              </div>
+                            </div>
+                            <span className="text-slate-200">{err.message}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 justify-end mt-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUncaughtErrors(prev => [
+                            {
+                              time: new Date().toLocaleTimeString('pt-BR'),
+                              level: 'WARNING',
+                              message: 'Falha simulada: Perda temporária de sinal de telemetria ONS (Conexão restabelecida via RAG local).',
+                              component: 'ONS API Connector'
+                            },
+                            ...prev
+                          ]);
+                        }}
+                        className="bg-amber-950/30 hover:bg-amber-950/50 border border-amber-900/50 text-amber-300 px-2.5 py-1 rounded text-[10px] font-mono cursor-pointer transition-colors"
+                      >
+                        Simular Alerta
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUncaughtErrors([
+                            { time: new Date().toLocaleTimeString('pt-BR'), level: 'INFO', message: 'MEx Observability Daemon reinicializado. Logs limpos.', component: 'System Core' }
+                          ]);
+                        }}
+                        className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 px-2.5 py-1 rounded text-[10px] font-mono cursor-pointer transition-colors"
+                      >
+                        Limpar Logs
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
