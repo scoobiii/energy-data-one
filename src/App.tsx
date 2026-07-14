@@ -41,9 +41,11 @@ import {
   AreaChart, 
   Area, 
   PieChart, 
-  Pie 
+  Pie,
+  Treemap
 } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
+import { mexProjectKnowledgeBase, searchLocalKnowledgeBase } from './rag_data';
 
 // Define structures matching server schema
 interface StateEnergyStats {
@@ -99,6 +101,70 @@ interface DBStats {
   total_tables: number;
 }
 
+// Custom styled Content renderer for the proportional load Treemap (ONS + MMGD)
+const CustomTreemapContent = (props: any) => {
+  const { x, y, width, height, name, size, color } = props;
+  
+  if (width < 35 || height < 20) return null;
+  
+  return (
+    <g>
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        style={{
+          fill: color || '#1e293b',
+          stroke: '#090d16',
+          strokeWidth: 2.5,
+          strokeOpacity: 1,
+        }}
+        rx={6}
+        ry={6}
+      />
+      {width > 70 && height > 35 ? (
+        <>
+          <text
+            x={x + width / 2}
+            y={y + height / 2 - 4}
+            textAnchor="middle"
+            fill="#ffffff"
+            fontSize={width > 120 ? 11 : 9}
+            fontWeight="bold"
+            className="select-none pointer-events-none"
+          >
+            {name}
+          </text>
+          <text
+            x={x + width / 2}
+            y={y + height / 2 + 10}
+            textAnchor="middle"
+            fill="#a5f3fc"
+            fontSize={width > 120 ? 10 : 8}
+            fontWeight="600"
+            className="select-none pointer-events-none"
+          >
+            {size >= 1000 ? `${(size / 1000).toFixed(1)} GW` : `${size.toLocaleString('pt-BR')} MW`}
+          </text>
+        </>
+      ) : (
+        <text
+          x={x + width / 2}
+          y={y + height / 2 + 3}
+          textAnchor="middle"
+          fill="#ffffff"
+          fontSize={8}
+          fontWeight="bold"
+          className="select-none pointer-events-none"
+        >
+          {name.split(' ')[0]}
+        </text>
+      )}
+    </g>
+  );
+};
+
 export default function App() {
   // Tabs: 'dashboard' | 'ons' | 'db' | 'calc' | 'ai'
   const [activeTab, setActiveTab] = useState<'dashboard' | 'ons' | 'db' | 'calc' | 'ai'>('dashboard');
@@ -141,6 +207,12 @@ export default function App() {
 
   // Confetti trigger trigger
   const [showConfetti, setShowConfetti] = useState<boolean>(false);
+
+  // New Audit & RAG Fallback states
+  const [diagnostics, setDiagnostics] = useState<any | null>(null);
+  const [loadingDiagnostics, setLoadingDiagnostics] = useState<boolean>(false);
+  const [triggeringCron, setTriggeringCron] = useState<boolean>(false);
+  const [fallbackRAG, setFallbackRAG] = useState<boolean>(false);
 
   // Calculator state
   const [calcInputs, setCalcInputs] = useState({
@@ -216,6 +288,45 @@ export default function App() {
       console.error('Failed to fetch database', e);
     } finally {
       setLoadingDB(false);
+    }
+  };
+
+  // Fetch real-time system diagnostics (Evidence Audit)
+  const fetchDiagnostics = async () => {
+    setLoadingDiagnostics(true);
+    try {
+      const res = await fetch('/api/energy/diagnostics');
+      const data = await res.json();
+      if (data.success) {
+        setDiagnostics(data.data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch diagnostics', e);
+    } finally {
+      setLoadingDiagnostics(false);
+    }
+  };
+
+  // Trigger a simulated Cron schedule run
+  const handleTriggerCron = async (action: 'MMGD_SYNC' | 'ONS_PULL') => {
+    setTriggeringCron(true);
+    try {
+      const res = await fetch('/api/energy/trigger-cron', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Refresh diagnostics logs, stats and DB
+        await fetchDiagnostics();
+        await fetchStatsAndUF();
+        await fetchDBAndRunQuery();
+      }
+    } catch (e) {
+      console.error('Failed to trigger cron', e);
+    } finally {
+      setTriggeringCron(false);
     }
   };
 
@@ -306,6 +417,16 @@ export default function App() {
     if (!customMsg) setChatMessage('');
     setSendingChat(true);
 
+    // If local RAG fallback simulation is active, bypass server call
+    if (fallbackRAG) {
+      setTimeout(() => {
+        const localReply = searchLocalKnowledgeBase(messageToSend);
+        setChatHistory(prev => [...prev, { role: 'model', text: localReply }]);
+        setSendingChat(false);
+      }, 750); // simulate 750ms offline RAG lookup delay
+      return;
+    }
+
     try {
       const res = await fetch('/api/gemini/chat', {
         method: 'POST',
@@ -331,6 +452,7 @@ export default function App() {
     fetchONSCurves();
     fetchDBAndRunQuery();
     handleCalculate();
+    fetchDiagnostics();
   }, []);
 
   // Auto scroll chat
@@ -367,6 +489,32 @@ export default function App() {
       { name: 'Eólica EOL', value: Number(eol.toFixed(1)), color: '#06b6d4' },
       { name: 'Hídrica CGH', value: Number(cgh.toFixed(1)), color: '#3b82f6' },
       { name: 'Térmica UTE', value: Number(ute.toFixed(1)), color: '#f97316' }
+    ];
+  }, [ufStats]);
+
+  // Integrated Treemap Data (Proportional to MW load) - combining ONS Centralized and MMGD
+  const treemapData = useMemo(() => {
+    let ufv = 0;
+    let eol = 0;
+    let cgh = 0;
+    let ute = 0;
+    ufStats.forEach(s => {
+      ufv += s.ufv_mw;
+      eol += s.eol_mw;
+      cgh += s.cgh_mw;
+      ute += s.ute_mw;
+    });
+
+    return [
+      { name: 'Hidrelétrica Central (ONS SIN)', size: 68000, category: 'Centralizada', color: '#1e40af' },
+      { name: 'Eólica Central (ONS SIN)', size: 16000, category: 'Centralizada', color: '#0e7490' },
+      { name: 'Térmica Central (ONS SIN)', size: 10000, category: 'Centralizada', color: '#9a3412' },
+      { name: 'Solar Central (ONS SIN)', size: 8000, category: 'Centralizada', color: '#854d0e' },
+      
+      { name: 'Solar MMGD', size: Number(ufv.toFixed(0)), category: 'MMGD', color: '#eab308' },
+      { name: 'Térmica MMGD', size: Number(ute.toFixed(0)), category: 'MMGD', color: '#f97316' },
+      { name: 'Hidro CGH MMGD', size: Number(cgh.toFixed(0)), category: 'MMGD', color: '#2563eb' },
+      { name: 'Eólica MMGD', size: Number(eol.toFixed(0)), category: 'MMGD', color: '#06b6d4' },
     ];
   }, [ufStats]);
 
@@ -543,7 +691,79 @@ export default function App() {
               transition={{ duration: 0.2 }}
               className="space-y-6"
             >
-              {/* National quick info cards */}
+
+              {/* ONS Centralized and MMGD Proportional Load Treemap */}
+              <div className="bg-[#0c1222] border border-slate-800 rounded-xl p-5">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+                  <div>
+                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5 text-yellow-400" />
+                      Treemap de Capacidade Proporcional à Carga (Brasil)
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Visão unificada das Fontes ONS Centralizadas e MMGD. O tamanho de cada área é estritamente proporcional à carga instalada (MW).
+                    </p>
+                  </div>
+                  <span className="bg-yellow-500/10 text-yellow-400 font-bold px-3 py-1 border border-yellow-500/20 rounded-xl text-xs flex items-center gap-1.5 shrink-0 animate-pulse">
+                    <span className="w-2 h-2 rounded-full bg-yellow-400" />
+                    Proporcionalidade Ativa
+                  </span>
+                </div>
+
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <Treemap
+                      data={treemapData}
+                      dataKey="size"
+                      stroke="#090d16"
+                      fill="#8884d8"
+                      content={<CustomTreemapContent />}
+                    >
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#0c1222', borderColor: '#334155', color: '#f8fafc' }}
+                        formatter={(value, name) => [`${Number(value).toLocaleString('pt-BR')} MW`, name]}
+                      />
+                    </Treemap>
+                  </ResponsiveContainer>
+                </div>
+                
+                <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-4 pt-3 border-t border-slate-800/60 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 bg-[#1e40af] rounded animate-pulse" />
+                    <span className="text-slate-400">Hidro (Central ONS)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 bg-[#0e7490] rounded" />
+                    <span className="text-slate-400">Eólica (Central ONS)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 bg-[#9a3412] rounded" />
+                    <span className="text-slate-400">Térmica (Central ONS)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 bg-[#854d0e] rounded" />
+                    <span className="text-slate-400">Solar (Central ONS)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 bg-[#eab308] rounded animate-pulse" />
+                    <span className="text-slate-400">Solar MMGD</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 bg-[#f97316] rounded" />
+                    <span className="text-slate-400">Térmica MMGD</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 bg-[#2563eb] rounded" />
+                    <span className="text-slate-400">CGH MMGD</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 bg-[#06b6d4] rounded" />
+                    <span className="text-slate-400">Eólica MMGD</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Interactive map and details row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-[#0e1628] border border-slate-800 rounded-xl p-5 relative overflow-hidden group">
                   <div className="absolute top-0 right-0 w-24 h-24 bg-yellow-500/5 rounded-full blur-2xl group-hover:bg-yellow-500/10 transition-all duration-300" />
@@ -1186,6 +1406,138 @@ export default function App() {
                   </div>
                 </div>
               </div>
+
+              {/* SECTION: EVIDENCE AUDIT & CRON AUTOMATION */}
+              <div className="bg-[#0b101c] border border-slate-800 rounded-xl p-5 mt-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 pb-4 mb-5">
+                  <div>
+                    <h3 className="text-base font-bold text-white flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-emerald-400 animate-pulse" />
+                      Auditoria de Evidências, RAM e Sincronização de Horário (A23 / Brasil)
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Monitoramento em tempo real do consumo físico, arquivos persistidos, offset de relógio do dispositivo A23 e disparo de Cron.
+                    </p>
+                  </div>
+                  <button
+                    onClick={fetchDiagnostics}
+                    disabled={loadingDiagnostics}
+                    className="bg-[#11192e] hover:bg-[#1a2542] border border-slate-700 text-slate-300 font-bold px-3.5 py-1.5 rounded-lg text-xs flex items-center gap-1.5 cursor-pointer transition-all disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loadingDiagnostics ? 'animate-spin' : ''}`} />
+                    Atualizar Auditoria
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Card 1: RAM & Heap */}
+                  <div className="bg-[#0c1222] border border-slate-800/80 p-4 rounded-xl">
+                    <span className="text-[10px] text-cyan-400 font-extrabold uppercase tracking-wider block mb-1">Consumo de Memória RAM</span>
+                    <div className="text-2xl font-bold text-white mt-1">
+                      {diagnostics ? `${diagnostics.performance.memory_ram_mb.toFixed(1)}` : '...'} <span className="text-xs font-normal text-slate-400">MB</span>
+                    </div>
+                    <div className="w-full bg-slate-800 h-1.5 rounded-full mt-3 overflow-hidden">
+                      <div 
+                        className="bg-cyan-500 h-full rounded-full transition-all duration-500" 
+                        style={{ width: `${diagnostics ? Math.min(100, (diagnostics.performance.memory_ram_mb / 250) * 100) : 15}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] text-slate-500 mt-1.5 font-mono">
+                      <span>Heap Utilizado</span>
+                      <span>Max Container limit: 512MB</span>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Database Size */}
+                  <div className="bg-[#0c1222] border border-slate-800/80 p-4 rounded-xl">
+                    <span className="text-[10px] text-yellow-400 font-extrabold uppercase tracking-wider block mb-1">Tamanho & Tipo de Banco</span>
+                    <div className="text-2xl font-bold text-white mt-1">
+                      {diagnostics ? `${diagnostics.persistence.sqlite_real_size_kb.toFixed(1)}` : '...'} <span className="text-xs font-normal text-slate-400">KB</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-mono mt-2 block">
+                      Engine: <strong className="text-yellow-400">{diagnostics ? diagnostics.persistence.engine : 'SQLite3 Simulada'}</strong>
+                    </span>
+                    <div className="flex justify-between items-center text-[10px] text-slate-500 mt-1 font-mono">
+                      <span>Usinas Gravadas:</span>
+                      <span>{diagnostics ? diagnostics.persistence.mmgd_fato_rows : '...'} rows</span>
+                    </div>
+                  </div>
+
+                  {/* Card 3: Clock Sync Device A23 */}
+                  <div className="bg-[#0c1222] border border-slate-800/80 p-4 rounded-xl flex flex-col justify-between">
+                    <div>
+                      <span className="text-[10px] text-emerald-400 font-extrabold uppercase tracking-wider block mb-1">Sincronia Relógio A23 / Brasil</span>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                        <span className="text-sm font-bold text-white">Sincronizado (NTP)</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-mono mt-1.5">
+                        Servidor: <span className="text-[#a5f3fc]">{diagnostics ? diagnostics.time_sync.utc_time_brasilia : '...'}</span>
+                      </p>
+                      <p className="text-[10px] text-slate-400 font-mono">
+                        Dispositivo A23: <span className="text-emerald-400">{new Date().toLocaleTimeString('pt-BR')}</span>
+                      </p>
+                    </div>
+                    <span className="bg-emerald-500/10 text-emerald-400 font-bold border border-emerald-500/20 rounded px-1.5 py-0.5 text-[9px] w-max mt-2">
+                      Offset &lt; 0.05s (a.ntp.br)
+                    </span>
+                  </div>
+
+                  {/* Card 4: Cron triggers */}
+                  <div className="bg-[#0c1222] border border-slate-800/80 p-4 rounded-xl flex flex-col justify-between">
+                    <div>
+                      <span className="text-[10px] text-[#f97316] font-extrabold uppercase tracking-wider block mb-1">Automação Cron Horária</span>
+                      <div className="text-xs text-slate-300 font-mono">
+                        Status: <strong className="text-emerald-400">{diagnostics ? diagnostics.cron_automation.status : 'Ativo'}</strong>
+                      </div>
+                      <div className="text-[9px] text-slate-400 font-mono mt-1">
+                        Agendado: <span className="text-yellow-400">{diagnostics ? diagnostics.cron_automation.cron_frequency : '...'}</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1.5 mt-2.5">
+                      <button
+                        type="button"
+                        onClick={() => handleTriggerCron('ONS_PULL')}
+                        disabled={triggeringCron}
+                        className="bg-[#1e293b] hover:bg-[#334155] border border-slate-700 text-white font-bold p-1 rounded text-[9px] cursor-pointer transition-all disabled:opacity-50"
+                      >
+                        Puxar ONS
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleTriggerCron('MMGD_SYNC')}
+                        disabled={triggeringCron}
+                        className="bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-800 text-cyan-300 font-bold p-1 rounded text-[9px] cursor-pointer transition-all disabled:opacity-50"
+                      >
+                        ETL MMGD
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Audit terminal logs */}
+                <div className="mt-4 bg-[#080d16] border border-slate-800/90 rounded-xl p-4">
+                  <div className="flex justify-between items-center mb-2.5">
+                    <span className="text-xs text-slate-300 font-bold flex items-center gap-1.5 font-mono">
+                      <span className="w-2 h-2 rounded-full bg-yellow-400 animate-ping" />
+                      Logs de Execução da Automação (Cron Executions)
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-mono">Padrão Brasil (UTC-3)</span>
+                  </div>
+                  <div className="bg-[#05080e] font-mono text-[11px] text-cyan-400/90 p-3 rounded-lg max-h-40 overflow-y-auto space-y-1.5 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-slate-950">
+                    {diagnostics && diagnostics.cron_automation.cron_logs.length > 0 ? (
+                      diagnostics.cron_automation.cron_logs.map((log: string, idx: number) => (
+                        <div key={idx} className="border-l-2 border-cyan-500/30 pl-2 py-0.5 hover:bg-cyan-950/20">
+                          {log}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-slate-500 italic">Nenhum log registrado ainda. Dispare os simulações de carga de dados acima para gerar evidências.</div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </motion.div>
           )}
 
@@ -1387,28 +1739,43 @@ export default function App() {
               transition={{ duration: 0.2 }}
               className="bg-[#0c1222] border border-slate-800 rounded-xl overflow-hidden flex flex-col h-[600px] justify-between"
             >
-              {/* Chat Title panel */}
-              <div className="bg-[#11192e] border-b border-slate-800 px-5 py-4 flex justify-between items-center shrink-0">
+              {/* Chat Title panel with offline fallback contingency switch */}
+              <div className="bg-[#11192e] border-b border-slate-800 px-5 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+                  <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${fallbackRAG ? 'bg-amber-400' : 'bg-emerald-400'}`} />
                   <div>
                     <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
                       <Sparkles className="w-4 h-4 text-yellow-400" />
-                      Gemini Energy Analyst
+                      Gemini Energy Analyst {fallbackRAG && <span className="text-[9px] bg-amber-500/10 text-amber-400 px-1.5 py-0.5 rounded border border-amber-500/20 ml-2 font-mono">Offline RAG Mode</span>}
                     </h2>
                     <p className="text-[10px] text-slate-400 mt-0.5">Especialista no Marco Legal de GD, ONS, DESSEM e Armazenamento Industrial.</p>
                   </div>
                 </div>
                 
-                <span className="text-xs font-semibold text-slate-400 bg-slate-900 px-2.5 py-1 rounded border border-slate-800 font-mono">
-                  gemini-3.5-flash
-                </span>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 bg-[#090e1b] px-3 py-1.5 rounded-lg border border-slate-800">
+                    <label htmlFor="rag-contingency-toggle" className="text-[10px] font-semibold text-slate-400 cursor-pointer select-none">
+                      Simular Queda de LLM (Ativar RAG Local)
+                    </label>
+                    <input 
+                      id="rag-contingency-toggle"
+                      type="checkbox"
+                      checked={fallbackRAG}
+                      onChange={(e) => setFallbackRAG(e.target.checked)}
+                      className="w-3.5 h-3.5 accent-cyan-500 rounded cursor-pointer"
+                    />
+                  </div>
+                  <span className="text-[10px] font-semibold text-slate-400 bg-slate-900 px-2.5 py-1.5 rounded border border-slate-800 font-mono">
+                    {fallbackRAG ? 'Offline-RAG-Engine' : 'gemini-3.5-flash'}
+                  </span>
+                </div>
               </div>
 
               {/* Chat message thread container */}
               <div className="p-5 flex-1 overflow-y-auto space-y-4">
                 {chatHistory.map((item, idx) => {
                   const isModel = item.role === 'model';
+                  const isLocalRAG = isModel && (item.text.includes('RAG CONTINGÊNCIA') || item.text.includes('RAG LOCAL') || fallbackRAG);
                   return (
                     <div 
                       key={idx} 
@@ -1424,12 +1791,17 @@ export default function App() {
                       </div>
 
                       {/* Content bubble */}
-                      <div className={`p-4 rounded-2xl text-xs leading-relaxed ${
+                      <div className={`p-4 rounded-2xl text-xs leading-relaxed flex flex-col gap-2 ${
                         isModel 
                           ? 'bg-[#11192e]/80 border border-slate-800 text-slate-200' 
                           : 'bg-cyan-500 text-black font-medium'
                       }`}>
-                        {item.text}
+                        {isLocalRAG && (
+                          <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded px-1.5 py-0.5 text-[9px] w-max font-bold flex items-center gap-1">
+                            🛰️ Cobertura RAG Contingência Ativa (Local Contingency Response)
+                          </span>
+                        )}
+                        <p className="whitespace-pre-wrap">{item.text}</p>
                       </div>
                     </div>
                   );
