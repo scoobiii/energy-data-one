@@ -24,6 +24,7 @@ import {
   BarChart3,
   ListFilter,
   ShieldCheck,
+  ShieldAlert,
   FileText,
   Copy,
   X,
@@ -130,8 +131,18 @@ const CustomTreemapContent = (props: any) => {
   const formattedSize = safeSize >= 1000 ? `${(safeSize / 1000).toFixed(1)} GW` : `${safeSize.toLocaleString('pt-BR')} MW`;
   const displayTicker = ticker || (name ? name.split(' ')[0].toUpperCase() : 'GD');
 
+  const itemOnDoubleClick = props.onDoubleClickItem || (props.payload && props.payload.onDoubleClickItem);
+
   return (
-    <g className="group select-none">
+    <g 
+      className="group select-none"
+      onDoubleClick={() => {
+        if (itemOnDoubleClick) {
+          itemOnDoubleClick(props);
+        }
+      }}
+    >
+      <title>{`Ativo: ${fullName || name || ticker}\nCapacidade: ${formattedSize}\nVariação: ${displayChange}\n\n*Duplo clique para exibir todos os componentes e detalhes*`}</title>
       <rect
         x={x}
         y={y}
@@ -143,7 +154,7 @@ const CustomTreemapContent = (props: any) => {
           strokeWidth: 1.5,
           cursor: 'pointer'
         }}
-        className="transition-all duration-300 hover:brightness-[1.18]"
+        className="transition-all duration-300 hover:brightness-[1.18] active:scale-[0.99] origin-center"
       />
       
       {width > 80 && height > 45 ? (
@@ -235,6 +246,148 @@ const CustomTreemapContent = (props: any) => {
   );
 };
 
+const treemapDetailsLookup: Record<string, {
+  title: string;
+  badge: string;
+  description: string;
+  subComponents: { name: string; share: string; status: string }[];
+  regulatoryText: string;
+  vision2040Text: string;
+  challenges: string[];
+}> = {
+  'ONS.HIDR': {
+    title: 'Hidrelétrica Centralizada (ONS SIN)',
+    badge: 'ONS.HIDR • Centralizada',
+    description: 'Espinha dorsal da estabilidade energética e da regulação de frequência do Sistema Interligado Nacional (SIN). Controla os principais reservatórios hidráulicos de regularização do país.',
+    subComponents: [
+      { name: 'Usinas de Grande Porte (UHE) com Reservatório', share: '62%', status: 'Operacional' },
+      { name: 'Usinas a Fio d\'Água (Sem Reservatório)', share: '33%', status: 'Operacional/Sazonal' },
+      { name: 'Pequenas Centrais Hidrelétricas (PCH) Centralizadas', share: '5%', status: 'Operacional' },
+    ],
+    regulatoryText: 'Regulada pelo ONS na operação direta do SIN. Sob as regras de despacho físico, sua valoração econômica é balizada pelo Custo de Oportunidade da Água (PLD Horário do DESSEM) e pelo Mecanismo de Realocação de Energia (MRE).',
+    vision2040Text: 'Prevê a modernização de ativos (repensar e repotencializar turbinas de usinas com mais de 30 anos) e a conversão de usinas selecionadas em Sistemas de Bombeamento Reversível (Pumped Storage), atuando como baterias de água gigantescas de 135 GW para cobrir picos solares e eólicos.',
+    challenges: [
+      'Garantia física impactada por severas secas e estresse hídrico climático.',
+      'Dificuldades para licenciamento ambiental de novos reservatórios na bacia Amazônica.',
+      'Gestão de múltiplos usos da água (irrigação, transporte e abastecimento versus geração).'
+    ]
+  },
+  'ONS.EOL': {
+    title: 'Eólica Centralizada (ONS SIN)',
+    badge: 'ONS.EOL • Centralizada',
+    description: 'Complexos de aerogeradores de grande escala localizados principalmente nas regiões de ventos de alta qualidade do Nordeste e Extremo Sul do Brasil. Apresenta alta complementaridade com a geração hidrelétrica.',
+    subComponents: [
+      { name: 'Parques Eólicos Onshore (Nordeste/Rio Grande do Sul)', share: '96%', status: 'Operacional/Expansão' },
+      { name: 'Parques Eólicos Offshore (Projetos em Licenciamento)', share: '4%', status: 'Em Planejamento' },
+    ],
+    regulatoryText: 'Os contratos de geração eólica competem ferozmente no Ambiente de Contratação Livre (ACL). No aspecto operacional, sofrem frequentes restrições de corte pelo ONS (curtailment) para evitar sobrecargas regionais nas linhas de transmissão.',
+    vision2040Text: 'Crescimento exponencial para 240 GW. Projetos offshore ao longo do Ceará, Rio Grande do Norte e Rio de Janeiro serão integrados à rede nacional com subestações marinhas de alta tecnologia, destinando o excedente para a produção em larga escala de Hidrogênio Verde.',
+    challenges: [
+      'Saturação da capacidade de escoamento no tronco de transmissão Norte-Nordeste.',
+      'Curtailment operativo (perdas financeiras não compensadas por limitação física da rede).',
+      'Logística pesada para transporte de pás de grandes dimensões para o interior.'
+    ]
+  },
+  'ONS.SOL': {
+    title: 'Solar Centralizada (ONS SIN)',
+    badge: 'ONS.SOL • Centralizada',
+    description: 'Grandes usinas solares centralizadas com rastreamento solar dinâmico de um eixo (single-axis trackers) focadas em mercados de grande porte e autoprodução industrial.',
+    subComponents: [
+      { name: 'Usinas de Grande Porte (Utility-Scale Tracker)', share: '92%', status: 'Operacional' },
+      { name: 'Sistemas com Ângulo Fixo (Fixed Tilt)', share: '8%', status: 'Operacional' },
+    ],
+    regulatoryText: 'Regulada pelas portarias do mercado livre de energia e pelos leilões de energia de reserva da ANEEL. Influencia o perfil de preços do DESSEM, jogando o preço horário ao piso do PLD durante as horas de pico de sol.',
+    vision2040Text: 'Crescimento de 8 GW para 180 GW centralizados, obrigatoriamente acoplados com sistemas BESS industriais de 4 a 6 horas para suavizar a rampa de descarga de fim de tarde e garantir o fornecimento de ponta segura.',
+    challenges: [
+      'Rápida obsolescência de inversores centrais e necessidade de repotencialização de módulos.',
+      'Perda de eficiência térmica devido ao aumento extremo das temperaturas ambientes.',
+      'Custos de conexão às redes de subtransmissão.'
+    ]
+  },
+  'ONS.TERM': {
+    title: 'Térmica Centralizada (ONS SIN)',
+    badge: 'ONS.TERM • Centralizada',
+    description: 'Complexos termelétricos centralizados de alta potência, essenciais para a segurança de carga e de tensão no SIN como reserva estável não intermitente.',
+    subComponents: [
+      { name: 'Termelétricas a Gás Natural (Ciclo Combinado)', share: '55%', status: 'Operacional/Reserva' },
+      { name: 'Térmicas a Biomassa de Cana-de-Açúcar', share: '30%', status: 'Sazonal' },
+      { name: 'Usinas Nucleares (Angra 1 e 2)', share: '15%', status: 'Geração Firme' },
+    ],
+    regulatoryText: 'Despachadas por segurança operacional ou ordem de mérito pelo ONS. A receita de capacidade garante remuneração fixa em leilões de reserva de capacidade para prover estabilidade ao sistema de transmissão.',
+    vision2040Text: 'Reconfiguração para 35 GW de potência. Desativação total de combustíveis fósseis pesados (carvão/óleo) e migração para biometano e turbinas termoelétricas alimentadas a Hidrogênio Verde ou amônia como contingência de curtíssimo prazo.',
+    challenges: [
+      'Pegada de carbono associada ao uso emergencial de óleo diesel e carvão mineral.',
+      'Preços voláteis do gás natural importado indexado ao dólar americano.',
+      'Elevado custo marginal de operação (CVU) que onera diretamente o consumidor final.'
+    ]
+  },
+  'GD.SOLAR': {
+    title: 'Solar MMGD (Geração Distribuída)',
+    badge: 'GD.SOLAR • Micro/Minigeração',
+    description: 'A maior revolução de energia distribuída do país. Composta por milhões de telhados residenciais, comerciais, industriais e cooperativas de geração solar remota.',
+    subComponents: [
+      { name: 'Microgeração Residencial (< 75 kW)', share: '62%', status: 'Operacional' },
+      { name: 'Minigeração Comercial e Industrial (75 kW - 5 MW)', share: '32%', status: 'Operacional' },
+      { name: 'Geração Compartilhada (Consórcios e Cooperativas)', share: '6%', status: 'Crescimento Rápido' },
+    ],
+    regulatoryText: 'Regida pela Lei 14.300/2022 (Marco Legal de GD). Conexões efetuadas pós-período de transição arcam gradualmente com parcelas da TUSD Fio B. Incentiva-se o autoconsumo local para otimizar faturamento e evitar sobrecarga na rede distribuidora.',
+    vision2040Text: 'Salto espetacular para 320 GW. Cada telhado residencial e industrial operará com inversores híbridos inteligentes e armazenamento térmico ou elétrico em baterias locais, reduzindo a dependência da rede elétrica em 90% nos horários de pico.',
+    challenges: [
+      'Inversão de fluxo de potência em transformadores de distribuição locais.',
+      'Restrições arbitrárias de conexão por parte das concessionárias locais (obstáculos de rede).',
+      'Necessidade de transição para tarifas horárias binômias de demanda para pequenos consumidores.'
+    ]
+  },
+  'GD.TERM': {
+    title: 'Térmica MMGD (Geração Distribuída)',
+    badge: 'GD.TERM • Micro/Minigeração',
+    description: 'Pequenos geradores despacháveis descentralizados instalados junto ao centro de consumo, aproveitando resíduos orgânicos de aterros sanitários e atividades agropecuárias.',
+    subComponents: [
+      { name: 'Biomassa Agroindustrial (Bagaço, Madeira, Cavaco)', share: '55%', status: 'Sazonal' },
+      { name: 'Biogás de Saneamento e Dejetos Animais', share: '35%', status: 'Operacional' },
+      { name: 'Geradores de Combustão de Emergência Comerciais', share: '10%', status: 'Operacional' },
+    ],
+    regulatoryText: 'Garante compensação de créditos sob o modelo de compensação da Lei 14.300/2022, com o benefício técnico de não sobrecarregar as linhas de subtransmissão por operar em base estável firme durante os períodos noturnos.',
+    vision2040Text: 'Escalar para 45 GW, com aproveitamento em massa dos resíduos orgânicos e efluentes do agronegócio nacional (vinhaça de etanol de milho/cana e dejetos de suinocultura) convertidos em energia estável de base contínua.',
+    challenges: [
+      'Fornecimento sazonal de biomassa florestal ou de resíduos agrícolas.',
+      'Custos de manutenção mecânica especializada de motogeradores de biogás.',
+      'Inexistência de rede de gasodutos locais de biometano refinado.'
+    ]
+  },
+  'GD.CGH': {
+    title: 'Hidro CGH MMGD (Geração Distribuída)',
+    badge: 'GD.CGH • Micro/Minigeração',
+    description: 'Pequenos aproveitamentos hidrelétricos descentralizados com potência individual inferior a 5 MW. Operam sob a modalidade de run-of-river (fio d\'água).',
+    subComponents: [
+      { name: 'Centrais Geradoras Hidrelétricas (< 5 MW) Individuais', share: '100%', status: 'Operacional' },
+    ],
+    regulatoryText: 'Beneficia-se das regras de compensação distribuída de energia, fornecendo eletricidade com baixíssimo impacto ambiental e sem necessidade de reservatórios inundados.',
+    vision2040Text: 'Meta de 15 GW instalados através do retrofitting (modernização tecnológica) de antigas turbinas industriais e fazendas históricas, com controle automatizado e sensoriamento preditivo por microrredes locais inteligentes.',
+    challenges: [
+      'Sensibilidade extrema à vazão sazonal de rios menores de cabeceira.',
+      'Custos burocráticos elevados e lentidão no licenciamento de pequenos barramentos.',
+      'Manutenção preventiva em locais de difícil acesso geográfico.'
+    ]
+  },
+  'GD.EOL': {
+    title: 'Eólica MMGD (Geração Distribuída)',
+    badge: 'GD.EOL • Micro/Minigeração',
+    description: 'Geração de energia a partir da força dos ventos por meio de micro e pequenos aerogeradores distribuídos localmente para autoconsumo rural, de cooperativas ou pequenas indústrias.',
+    subComponents: [
+      { name: 'Aerogeradores Rurais e Fazendas Isoladas Onshore', share: '85%', status: 'Operacional' },
+      { name: 'Sistemas Híbridos integrados Eólico-Solar', share: '15%', status: 'Operacional' },
+    ],
+    regulatoryText: 'Compensa créditos de energia na baixa ou média tensão sob o marco legal da Lei 14.300/2022, geralmente com complementaridade com sistemas de compensação em baterias locais.',
+    vision2040Text: 'Atingirá 10 GW de capacidade instalada através do desenvolvimento e disseminação de microaerogeradores de eixo vertical (VAWT) silenciosos e de alta eficiência, ideais para o setor comercial periurbano e agropecuária intensiva de corte.',
+    challenges: [
+      'Custos de importação de equipamentos e baixa oferta de turbinas de pequeno porte nacionais.',
+      'Turbulência de ventos em baixas altitudes próxima a obstáculos construídos ou árvores.',
+      'Baixo fator de capacidade quando não planejado por campanhas de medição robustas.'
+    ]
+  },
+};
+
 export default function App() {
   // Tabs: 'dashboard' | 'ons' | 'db' | 'calc' | 'ai'
   const [activeTab, setActiveTab] = useState<'dashboard' | 'ons' | 'db' | 'calc' | 'ai'>('dashboard');
@@ -291,6 +444,13 @@ export default function App() {
 
   // Treemap Timeframe Selection: '1h' | '1d' | '1w' (Finviz Map Style)
   const [mapTimeframe, setMapTimeframe] = useState<'1h' | '1d' | '1w'>('1h');
+
+  // Treemap Map View Selection: 'live' | 'mensal' | 'anual' | 'vision2030' | 'vision2040' (Finviz Map Style)
+  const [mapView, setMapView] = useState<'live' | 'mensal' | 'anual' | 'vision2030' | 'vision2040'>('live');
+
+  // Double-clicked Item Modal for deep-dive components and details
+  const [selectedTreemapItem, setSelectedTreemapItem] = useState<any | null>(null);
+  const [showTreemapDetailModal, setShowTreemapDetailModal] = useState<boolean>(false);
 
   // Uncaught errors public log state (Observability & Diagnostics)
   const [uncaughtErrors, setUncaughtErrors] = useState<{ time: string; level: 'WARNING' | 'CRITICAL' | 'INFO'; message: string; component: string }[]>([
@@ -715,54 +875,115 @@ MEx Energia BR • Tecnologia em Barramento 800VDC e Microrredes.
       ute += s.ute_mw;
     });
 
-    // Define change percentages based on timeframe (Finviz Style performance scale)
-    const timeframeChanges = {
-      '1h': {
-        'ONS.HIDR': 0.45,
-        'ONS.EOL': 3.80,
-        'ONS.TERM': -5.12,
-        'ONS.SOL': 8.40,
-        'GD.SOLAR': 11.20,
-        'GD.TERM': -1.80,
-        'GD.CGH': 0.12,
-        'GD.EOL': 2.30,
-      },
-      '1d': {
-        'ONS.HIDR': -1.20,
-        'ONS.EOL': 12.45,
-        'ONS.TERM': 4.10,
-        'ONS.SOL': -2.30,
-        'GD.SOLAR': -3.50,
-        'GD.TERM': 1.15,
-        'GD.CGH': 0.85,
-        'GD.EOL': 9.80,
-      },
-      '1w': {
-        'ONS.HIDR': 0.00,
-        'ONS.EOL': 0.15,
-        'ONS.TERM': -0.10,
-        'ONS.SOL': 0.42,
-        'GD.SOLAR': 3.15,
-        'GD.TERM': 0.05,
-        'GD.CGH': 0.02,
-        'GD.EOL': 0.80,
-      }
+    const handleItemClick = (props: any) => {
+      setSelectedTreemapItem(props);
+      setShowTreemapDetailModal(true);
     };
 
-    const activeChanges = timeframeChanges[mapTimeframe] || timeframeChanges['1h'];
+    let baseData = [];
 
-    return [
-      { name: 'Hidrelétrica Central (ONS SIN)', ticker: 'ONS.HIDR', size: 68000, category: 'Centralizada', change: activeChanges['ONS.HIDR'], fullName: 'Hidrelétrica Central ONS' },
-      { name: 'Eólica Central (ONS SIN)', ticker: 'ONS.EOL', size: 16000, category: 'Centralizada', change: activeChanges['ONS.EOL'], fullName: 'Eólica Central ONS' },
-      { name: 'Térmica Central (ONS SIN)', ticker: 'ONS.TERM', size: 10000, category: 'Centralizada', change: activeChanges['ONS.TERM'], fullName: 'Térmica Central ONS' },
-      { name: 'Solar Central (ONS SIN)', ticker: 'ONS.SOL', size: 8000, category: 'Centralizada', change: activeChanges['ONS.SOL'], fullName: 'Solar Central ONS' },
-      
-      { name: 'Solar MMGD', ticker: 'GD.SOLAR', size: Number(ufv.toFixed(0)), category: 'MMGD', change: activeChanges['GD.SOLAR'], fullName: 'Geração Distribuída Solar' },
-      { name: 'Térmica MMGD', ticker: 'GD.TERM', size: Number(ute.toFixed(0)), category: 'MMGD', change: activeChanges['GD.TERM'], fullName: 'Geração Distribuída Térmica' },
-      { name: 'Hidro CGH MMGD', ticker: 'GD.CGH', size: Number(cgh.toFixed(0)), category: 'MMGD', change: activeChanges['GD.CGH'], fullName: 'Geração Distribuída Central Hidrelétrica' },
-      { name: 'Eólica MMGD', ticker: 'GD.EOL', size: Number(eol.toFixed(0)), category: 'MMGD', change: activeChanges['GD.EOL'], fullName: 'Geração Distribuída Eólica' },
-    ];
-  }, [ufStats, mapTimeframe]);
+    if (mapView === 'live') {
+      // Define change percentages based on timeframe (Finviz Style performance scale)
+      const timeframeChanges = {
+        '1h': {
+          'ONS.HIDR': 0.45,
+          'ONS.EOL': 3.80,
+          'ONS.TERM': -5.12,
+          'ONS.SOL': 8.40,
+          'GD.SOLAR': 11.20,
+          'GD.TERM': -1.80,
+          'GD.CGH': 0.12,
+          'GD.EOL': 2.30,
+        },
+        '1d': {
+          'ONS.HIDR': -1.20,
+          'ONS.EOL': 12.45,
+          'ONS.TERM': 4.10,
+          'ONS.SOL': -2.30,
+          'GD.SOLAR': -3.50,
+          'GD.TERM': 1.15,
+          'GD.CGH': 0.85,
+          'GD.EOL': 9.80,
+        },
+        '1w': {
+          'ONS.HIDR': 0.00,
+          'ONS.EOL': 0.15,
+          'ONS.TERM': -0.10,
+          'ONS.SOL': 0.42,
+          'GD.SOLAR': 3.15,
+          'GD.TERM': 0.05,
+          'GD.CGH': 0.02,
+          'GD.EOL': 0.80,
+        }
+      };
+
+      const activeChanges = timeframeChanges[mapTimeframe] || timeframeChanges['1h'];
+
+      baseData = [
+        { name: 'Hidrelétrica Central (ONS SIN)', ticker: 'ONS.HIDR', size: 68000, category: 'Centralizada', change: activeChanges['ONS.HIDR'], fullName: 'Hidrelétrica Central ONS', onDoubleClickItem: handleItemClick },
+        { name: 'Eólica Central (ONS SIN)', ticker: 'ONS.EOL', size: 16000, category: 'Centralizada', change: activeChanges['ONS.EOL'], fullName: 'Eólica Central ONS', onDoubleClickItem: handleItemClick },
+        { name: 'Térmica Central (ONS SIN)', ticker: 'ONS.TERM', size: 10000, category: 'Centralizada', change: activeChanges['ONS.TERM'], fullName: 'Térmica Central ONS', onDoubleClickItem: handleItemClick },
+        { name: 'Solar Central (ONS SIN)', ticker: 'ONS.SOL', size: 8000, category: 'Centralizada', change: activeChanges['ONS.SOL'], fullName: 'Solar Central ONS', onDoubleClickItem: handleItemClick },
+        
+        { name: 'Solar MMGD', ticker: 'GD.SOLAR', size: Number(ufv.toFixed(0)), category: 'MMGD', change: activeChanges['GD.SOLAR'], fullName: 'Geração Distribuída Solar', onDoubleClickItem: handleItemClick },
+        { name: 'Térmica MMGD', ticker: 'GD.TERM', size: Number(ute.toFixed(0)), category: 'MMGD', change: activeChanges['GD.TERM'], fullName: 'Geração Distribuída Térmica', onDoubleClickItem: handleItemClick },
+        { name: 'Hidro CGH MMGD', ticker: 'GD.CGH', size: Number(cgh.toFixed(0)), category: 'MMGD', change: activeChanges['GD.CGH'], fullName: 'Geração Distribuída Central Hidrelétrica', onDoubleClickItem: handleItemClick },
+        { name: 'Eólica MMGD', ticker: 'GD.EOL', size: Number(eol.toFixed(0)), category: 'MMGD', change: activeChanges['GD.EOL'], fullName: 'Geração Distribuída Eólica', onDoubleClickItem: handleItemClick },
+      ];
+    } else if (mapView === 'mensal') {
+      baseData = [
+        { name: 'Hidrelétrica Central (ONS SIN)', ticker: 'ONS.HIDR', size: 72000, category: 'Centralizada', change: 4.50, fullName: 'Hidrelétrica Central ONS', onDoubleClickItem: handleItemClick },
+        { name: 'Eólica Central (ONS SIN)', ticker: 'ONS.EOL', size: 18500, category: 'Centralizada', change: 15.60, fullName: 'Eólica Central ONS', onDoubleClickItem: handleItemClick },
+        { name: 'Térmica Central (ONS SIN)', ticker: 'ONS.TERM', size: 12000, category: 'Centralizada', change: 20.00, fullName: 'Térmica Central ONS', onDoubleClickItem: handleItemClick },
+        { name: 'Solar Central (ONS SIN)', ticker: 'ONS.SOL', size: 9200, category: 'Centralizada', change: 14.80, fullName: 'Solar Central ONS', onDoubleClickItem: handleItemClick },
+        
+        { name: 'Solar MMGD', ticker: 'GD.SOLAR', size: Number((ufv * 1.08).toFixed(0)), category: 'MMGD', change: 22.10, fullName: 'Geração Distribuída Solar', onDoubleClickItem: handleItemClick },
+        { name: 'Térmica MMGD', ticker: 'GD.TERM', size: Number((ute * 1.02).toFixed(0)), category: 'MMGD', change: 2.50, fullName: 'Geração Distribuída Térmica', onDoubleClickItem: handleItemClick },
+        { name: 'Hidro CGH MMGD', ticker: 'GD.CGH', size: Number((cgh * 0.95).toFixed(0)), category: 'MMGD', change: -8.40, fullName: 'Geração Distribuída Central Hidrelétrica', onDoubleClickItem: handleItemClick },
+        { name: 'Eólica MMGD', ticker: 'GD.EOL', size: Number((eol * 1.05).toFixed(0)), category: 'MMGD', change: 10.50, fullName: 'Geração Distribuída Eólica', onDoubleClickItem: handleItemClick },
+      ];
+    } else if (mapView === 'anual') {
+      baseData = [
+        { name: 'Hidrelétrica Central (ONS SIN)', ticker: 'ONS.HIDR', size: 68000, category: 'Centralizada', change: 0.50, fullName: 'Hidrelétrica Central ONS', onDoubleClickItem: handleItemClick },
+        { name: 'Eólica Central (ONS SIN)', ticker: 'ONS.EOL', size: 19000, category: 'Centralizada', change: 18.40, fullName: 'Eólica Central ONS', onDoubleClickItem: handleItemClick },
+        { name: 'Térmica Central (ONS SIN)', ticker: 'ONS.TERM', size: 9800, category: 'Centralizada', change: -2.00, fullName: 'Térmica Central ONS', onDoubleClickItem: handleItemClick },
+        { name: 'Solar Central (ONS SIN)', ticker: 'ONS.SOL', size: 11500, category: 'Centralizada', change: 28.00, fullName: 'Solar Central ONS', onDoubleClickItem: handleItemClick },
+        
+        { name: 'Solar MMGD', ticker: 'GD.SOLAR', size: Number((ufv * 1.28).toFixed(0)), category: 'MMGD', change: 38.20, fullName: 'Geração Distribuída Solar', onDoubleClickItem: handleItemClick },
+        { name: 'Térmica MMGD', ticker: 'GD.TERM', size: Number((ute * 1.08).toFixed(0)), category: 'MMGD', change: 8.50, fullName: 'Geração Distribuída Térmica', onDoubleClickItem: handleItemClick },
+        { name: 'Hidro CGH MMGD', ticker: 'GD.CGH', size: Number((cgh * 1.01).toFixed(0)), category: 'MMGD', change: 1.20, fullName: 'Geração Distribuída Central Hidrelétrica', onDoubleClickItem: handleItemClick },
+        { name: 'Eólica MMGD', ticker: 'GD.EOL', size: Number((eol * 1.14).toFixed(0)), category: 'MMGD', change: 14.00, fullName: 'Geração Distribuída Eólica', onDoubleClickItem: handleItemClick },
+      ];
+    } else if (mapView === 'vision2030') {
+      // BR Vision 2030 - Matriz de Potência para 20.000 kWh per Capita (Alvo Intermediário 2030)
+      baseData = [
+        { name: 'Solar MMGD', ticker: 'GD.SOLAR', size: 190000, category: 'MMGD', change: 35.40, fullName: 'Geração Distribuída Solar (Visão 2030)', onDoubleClickItem: handleItemClick },
+        { name: 'Eólica Central (ONS SIN)', ticker: 'ONS.EOL', size: 120000, category: 'Centralizada', change: 24.10, fullName: 'Eólica Central ONS (Visão 2030)', onDoubleClickItem: handleItemClick },
+        { name: 'Hidrelétrica Central (ONS SIN)', ticker: 'ONS.HIDR', size: 105000, category: 'Centralizada', change: 2.10, fullName: 'Hidrelétrica Central ONS (Visão 2030)', onDoubleClickItem: handleItemClick },
+        { name: 'Solar Central (ONS SIN)', ticker: 'ONS.SOL', size: 95000, category: 'Centralizada', change: 31.80, fullName: 'Solar Central ONS (Visão 2030)', onDoubleClickItem: handleItemClick },
+        { name: 'Térmica MMGD', ticker: 'GD.TERM', size: 25000, category: 'MMGD', change: 12.50, fullName: 'Geração Distribuída Térmica (Visão 2030)', onDoubleClickItem: handleItemClick },
+        { name: 'Térmica Central (ONS SIN)', ticker: 'ONS.TERM', size: 18000, category: 'Centralizada', change: -1.50, fullName: 'Térmica Central ONS (Visão 2030)', onDoubleClickItem: handleItemClick },
+        { name: 'Hidro CGH MMGD', ticker: 'GD.CGH', size: 8000, category: 'MMGD', change: 5.20, fullName: 'Geração Distribuída Central Hidrelétrica (Visão 2030)', onDoubleClickItem: handleItemClick },
+        { name: 'Eólica MMGD', ticker: 'GD.EOL', size: 6000, category: 'MMGD', change: 18.00, fullName: 'Geração Distribuída Eólica (Visão 2030)', onDoubleClickItem: handleItemClick },
+      ];
+    } else { // 'vision2040'
+      // BR Vision 3040/2040 potentia for 20000 kWh per capita consumption
+      baseData = [
+        { name: 'Solar MMGD', ticker: 'GD.SOLAR', size: 320000, category: 'MMGD', change: 19.50, fullName: 'Geração Distribuída Solar (Visão 2040)', onDoubleClickItem: handleItemClick },
+        { name: 'Eólica Central (ONS SIN)', ticker: 'ONS.EOL', size: 240000, category: 'Centralizada', change: 21.30, fullName: 'Eólica Central ONS (Visão 2040)', onDoubleClickItem: handleItemClick },
+        { name: 'Solar Central (ONS SIN)', ticker: 'ONS.SOL', size: 180000, category: 'Centralizada', change: 24.80, fullName: 'Solar Central ONS (Visão 2040)', onDoubleClickItem: handleItemClick },
+        { name: 'Hidrelétrica Central (ONS SIN)', ticker: 'ONS.HIDR', size: 135000, category: 'Centralizada', change: 4.10, fullName: 'Hidrelétrica Central ONS (Visão 2040)', onDoubleClickItem: handleItemClick },
+        { name: 'Térmica MMGD', ticker: 'GD.TERM', size: 45000, category: 'MMGD', change: 18.20, fullName: 'Geração Distribuída Térmica (Visão 2040)', onDoubleClickItem: handleItemClick },
+        { name: 'Térmica Central (ONS SIN)', ticker: 'ONS.TERM', size: 35000, category: 'Centralizada', change: 8.90, fullName: 'Térmica Central ONS (Visão 2040)', onDoubleClickItem: handleItemClick },
+        { name: 'Hidro CGH MMGD', ticker: 'GD.CGH', size: 15000, category: 'MMGD', change: 14.40, fullName: 'Geração Distribuída Central Hidrelétrica (Visão 2040)', onDoubleClickItem: handleItemClick },
+        { name: 'Eólica MMGD', ticker: 'GD.EOL', size: 10000, category: 'MMGD', change: 12.50, fullName: 'Geração Distribuída Eólica (Visão 2040)', onDoubleClickItem: handleItemClick },
+      ];
+    }
+
+    // Explicitly sort from largest size to smallest size, descending:
+    // "maior da esquerda para direita, de cima para baixo"
+    return [...baseData].sort((a, b) => b.size - a.size);
+  }, [ufStats, mapTimeframe, mapView]);
 
   return (
     <div className="min-h-screen bg-[#090d16] text-[#e2e8f0] font-sans antialiased relative selection:bg-cyan-500 selection:text-black">
@@ -940,57 +1161,156 @@ MEx Energia BR • Tecnologia em Barramento 800VDC e Microrredes.
 
               {/* ONS Centralized and MMGD Proportional Load Treemap - Finviz Style */}
               <div className="bg-[#0b0f19] border border-slate-800 rounded-xl p-5 shadow-2xl">
-                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-5 pb-4 border-b border-slate-800/80">
+                <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-5 pb-4 border-b border-slate-800/80">
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 bg-emerald-500 animate-pulse rounded-full" />
                       <h2 className="text-base font-extrabold text-white tracking-tight uppercase font-sans">
-                        Mapa de Calor de Capacidade & Performance (Estilo Finviz)
+                        {mapView === 'live' && "Mapa de Calor de Capacidade & Performance (Estilo Finviz)"}
+                        {mapView === 'mensal' && "Mapa de Calor - Sazonalidade & Despacho Mensal"}
+                        {mapView === 'anual' && "Mapa de Calor - Expansão de Capacidade & Crescimento Anual"}
+                        {mapView === 'vision2030' && "BR Vision 2030 - Matriz de Potência para 20.000 kWh per Capita"}
+                        {mapView === 'vision2040' && "BR Vision 2040 - Matriz de Potência para 20.000 kWh per Capita"}
                       </h2>
                     </div>
                     <p className="text-[11px] text-[#94a3b8] mt-1 font-mono">
-                      Área total = Capacidade Operacional (MW) • Cor do Bloco = Variação de Despacho & Crescimento GD (st={mapTimeframe})
+                      {mapView === 'live' && `Área total = Capacidade Operacional (MW) • Cor do Bloco = Variação de Despacho & Crescimento GD (st=${mapTimeframe})`}
+                      {mapView === 'mensal' && "Área total = Capacidade Operacional Diária Média (MW) • Cor do Bloco = Desvio Percentual vs Média Sazonal de Longo Termo"}
+                      {mapView === 'anual' && "Área total = Projeção de Capacidade Instalada Anual (MW) • Cor do Bloco = Taxa de Crescimento Anual YoY (%)"}
+                      {mapView === 'vision2030' && "Área total = Potência Instalada Alvo 2030 (GW) • Cor do Bloco = CAGR (%) Projetado para Abundância Elétrica"}
+                      {mapView === 'vision2040' && "Área total = Potência Instalada Necessária (GW) • Cor do Bloco = CAGR (%) Projetado para Abundância Elétrica"}
                     </p>
                   </div>
                   
-                  {/* Timeframe selector (st=1h, st=1d, st=1w) */}
-                  <div className="flex items-center gap-2 bg-[#060911] border border-slate-800 rounded-lg p-1 shrink-0 font-mono text-[10px]">
-                    <span className="text-slate-500 font-bold px-2 uppercase">Timeframe (st):</span>
-                    <button
-                      type="button"
-                      onClick={() => setMapTimeframe('1h')}
-                      className={`px-3 py-1 rounded font-extrabold cursor-pointer transition-all ${
-                        mapTimeframe === '1h'
-                          ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-black shadow-md shadow-emerald-500/10'
-                          : 'text-slate-400 hover:text-white hover:bg-slate-900'
-                      }`}
-                    >
-                      1H (Despacho)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMapTimeframe('1d')}
-                      className={`px-3 py-1 rounded font-extrabold cursor-pointer transition-all ${
-                        mapTimeframe === '1d'
-                          ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-black shadow-md shadow-emerald-500/10'
-                          : 'text-slate-400 hover:text-white hover:bg-slate-900'
-                      }`}
-                    >
-                      1D (Diário)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMapTimeframe('1w')}
-                      className={`px-3 py-1 rounded font-extrabold cursor-pointer transition-all ${
-                        mapTimeframe === '1w'
-                          ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-black shadow-md shadow-emerald-500/10'
-                          : 'text-slate-400 hover:text-white hover:bg-slate-900'
-                      }`}
-                    >
-                      1W (Semanal)
-                    </button>
+                  <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
+                    {/* View selector */}
+                    <div className="flex flex-wrap items-center gap-1 bg-[#060911] border border-slate-800 rounded-lg p-1 font-mono text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => setMapView('live')}
+                        className={`px-3 py-1.5 rounded font-extrabold cursor-pointer transition-all ${
+                          mapView === 'live'
+                            ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-black shadow-md shadow-cyan-500/10'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                        }`}
+                      >
+                        LIVE (DESSEM)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMapView('mensal')}
+                        className={`px-3 py-1.5 rounded font-extrabold cursor-pointer transition-all ${
+                          mapView === 'mensal'
+                            ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-black shadow-md'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                        }`}
+                      >
+                        MENSAL (Sazonal)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMapView('anual')}
+                        className={`px-3 py-1.5 rounded font-extrabold cursor-pointer transition-all ${
+                          mapView === 'anual'
+                            ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-black shadow-md'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                        }`}
+                      >
+                        ANUAL (YoY)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMapView('vision2030')}
+                        className={`px-3 py-1.5 rounded font-extrabold cursor-pointer transition-all ${
+                          mapView === 'vision2030'
+                            ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-black shadow-md shadow-yellow-500/15'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                        }`}
+                      >
+                        ⚡ BR VISION 2030 (20k kWh)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMapView('vision2040')}
+                        className={`px-3 py-1.5 rounded font-extrabold cursor-pointer transition-all ${
+                          mapView === 'vision2040'
+                            ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-black shadow-md shadow-yellow-500/15'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                        }`}
+                      >
+                        ⚡ BR VISION 2040 (20k kWh)
+                      </button>
+                    </div>
+
+                    {/* Timeframe selector (st=1h, st=1d, st=1w) */}
+                    {mapView === 'live' && (
+                      <div className="flex items-center gap-1 bg-[#060911] border border-slate-800 rounded-lg p-1 shrink-0 font-mono text-[10px]">
+                        <span className="text-slate-500 font-bold px-1.5 uppercase">st:</span>
+                        <button
+                          type="button"
+                          onClick={() => setMapTimeframe('1h')}
+                          className={`px-2.5 py-1 rounded font-extrabold cursor-pointer transition-all ${
+                            mapTimeframe === '1h'
+                              ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-black shadow-md'
+                              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                          }`}
+                        >
+                          1H
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMapTimeframe('1d')}
+                          className={`px-2.5 py-1 rounded font-extrabold cursor-pointer transition-all ${
+                            mapTimeframe === '1d'
+                              ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-black shadow-md'
+                              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                          }`}
+                        >
+                          1D
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMapTimeframe('1w')}
+                          className={`px-2.5 py-1 rounded font-extrabold cursor-pointer transition-all ${
+                            mapTimeframe === '1w'
+                              ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-black shadow-md'
+                              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                          }`}
+                        >
+                          1W
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
+
+                {/* BR Vision 2030 explanatory banner */}
+                {mapView === 'vision2030' && (
+                  <div className="mb-4 bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 p-4 rounded-xl text-xs flex gap-3 shadow-lg">
+                    <Sparkles className="w-5 h-5 text-yellow-400 shrink-0 mt-0.5 animate-pulse" />
+                    <div>
+                      <span className="font-bold uppercase tracking-wider block mb-1">PROJEÇÃO BRASIL VISION 2030 (POTÊNCIA PARA 20.000 kWh CONSUMO PER CAPITA - ALVO INTERMEDIÁRIO)</span>
+                      Para colocar o Brasil no rumo de uma matriz elétrica apta a fornecer <strong>20.000 kWh de consumo per capita</strong>, a meta para 2030 estabelece um parque instalatório intermediário de <strong>612 GW de potência instalada total</strong> (cerca de 3x a potência atual).
+                      <div className="mt-2 text-slate-400 font-mono text-[10px]">
+                        Cálculo de Base: Direcionamento focado em infraestrutura eletrointensiva de transição, com forte expansão da Geração Distribuída (Solar MMGD com 190 GW) e Eólica Centralizada (120 GW) com microrredes locais integradas.
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* BR Vision 2040 explanatory banner */}
+                {mapView === 'vision2040' && (
+                  <div className="mb-4 bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 p-4 rounded-xl text-xs flex gap-3 shadow-lg">
+                    <Sparkles className="w-5 h-5 text-yellow-400 shrink-0 mt-0.5 animate-pulse" />
+                    <div>
+                      <span className="font-bold uppercase tracking-wider block mb-1">PROJEÇÃO BRASIL VISION 2040 (POTÊNCIA PARA 20.000 kWh CONSUMO PER CAPITA)</span>
+                      Para que o Brasil atinja um padrão de vida de abundância eletrointensiva com <strong>20.000 kWh de consumo anual per capita</strong> (comparável aos países de maior PIB tecnológico do mundo, como Noruega, Islândia e hubs de datacenter avançados), o sistema elétrico nacional precisará escalar dos atuais ~210 GW para <strong>980 GW de potência instalada total</strong>.
+                      <div className="mt-2 text-slate-400 font-mono text-[10px]">
+                        Cálculo de Base: 215M habitantes × 20.000 kWh/ano = 4.300 TWh consumidos ao ano. Considerando o mix de fontes com capacidade média ponderada de 50%, requer ~980.000 MW operacionais, impulsionados pela expansão astronômica da Geração Distribuída (Solar MMGD com 320 GW) e Eólica Centralizada (240 GW).
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Dense Treemap Container */}
                 <div className="h-80 bg-[#05080e] border border-slate-900/80 p-0.5 rounded overflow-hidden relative">
@@ -1014,12 +1334,20 @@ MEx Energia BR • Tecnologia em Barramento 800VDC e Microrredes.
                         formatter={(value, name, item) => {
                           const payload = item?.payload || {};
                           const displayChange = typeof payload.change === 'number' ? `${payload.change >= 0 ? '+' : ''}${payload.change.toFixed(2)}%` : '0.00%';
+                          let metricName = `Variabilidade (${mapTimeframe})`;
+                          if (mapView === 'mensal') metricName = "Desvio Sazonal";
+                          if (mapView === 'anual') metricName = "Crescimento YoY";
+                          if (mapView === 'vision2040') metricName = "CAGR Requerido (Até 2040)";
+
                           return [
                             <div className="space-y-1">
                               <div className="font-sans font-bold text-slate-100">{payload.fullName || name}</div>
                               <div className="text-yellow-400">Potência: <strong className="text-white">{Number(value).toLocaleString('pt-BR')} MW</strong></div>
-                              <div className={payload.change >= 0 ? 'text-emerald-400' : 'text-rose-400'}>Variabilidade ({mapTimeframe}): <strong>{displayChange}</strong></div>
+                              <div className={payload.change >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{metricName}: <strong>{displayChange}</strong></div>
                               <div className="text-slate-400 text-[10px]">Segmento: {payload.category}</div>
+                              <div className="text-cyan-400 text-[9px] mt-1 border-t border-slate-800/80 pt-1 flex items-center gap-1 animate-pulse font-mono">
+                                🖱️ Clique duplo: todos componentes & detalhes
+                              </div>
                             </div>,
                             null
                           ];
@@ -1033,7 +1361,7 @@ MEx Energia BR • Tecnologia em Barramento 800VDC e Microrredes.
                 <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 mt-5 pt-4 border-t border-slate-800/80 text-[10px] font-mono">
                   {/* Legend Map Tickers Mapping */}
                   <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-slate-400 shrink-0">
-                    <span className="font-extrabold text-slate-300">Tickers de Energia:</span>
+                    <span className="font-extrabold text-slate-300">Filtro de Legendas:</span>
                     <span className="hover:text-white transition-colors">⚡ ONS.HIDR (Hidro SIN)</span>
                     <span className="hover:text-white transition-colors">💨 ONS.EOL (Eólica SIN)</span>
                     <span className="hover:text-white transition-colors">🔥 ONS.TERM (Térmica SIN)</span>
@@ -2220,23 +2548,233 @@ MEx Energia BR • Tecnologia em Barramento 800VDC e Microrredes.
                   type="text"
                   value={chatMessage}
                   onChange={(e) => setChatMessage(e.target.value)}
-                  className="flex-1 bg-[#090d16] border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-cyan-500 placeholder-slate-500"
-                  placeholder="Pergunte ao analista sobre Lei 14.300, tarifas, ONS carga..."
+                  className="flex-1 bg-[#060911] border border-slate-800 text-slate-100 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500 placeholder-slate-500"
+                  placeholder="Escreva sua pergunta regulatória ou operacional..."
                 />
                 <button
                   type="submit"
                   disabled={sendingChat || !chatMessage.trim()}
-                  className="bg-cyan-500 text-black font-bold p-3 rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center cursor-pointer"
+                  className="bg-gradient-to-r from-cyan-400 to-blue-500 hover:opacity-90 disabled:opacity-50 text-black px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
                 >
-                  <Send className="w-4.5 h-4.5" />
+                  <Send className="w-3.5 h-3.5" />
+                  Enviar
                 </button>
               </form>
             </motion.div>
           )}
-
         </AnimatePresence>
-
       </main>
+
+      {/* Detailed Treemap Item Modal */}
+      <AnimatePresence>
+        {showTreemapDetailModal && selectedTreemapItem && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowTreemapDetailModal(false)}
+              className="absolute inset-0 bg-black/85 backdrop-blur-md"
+            />
+            
+            {/* Modal Box */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: 'spring', duration: 0.4 }}
+              className="relative w-full max-w-4xl bg-[#0a0f1d] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] z-10 font-sans"
+            >
+              {/* Header */}
+              <div className="bg-[#11192e] border-b border-slate-800 px-6 py-5 flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-cyan-500/10 rounded-lg border border-cyan-500/20 text-cyan-400">
+                    <Activity className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-extrabold text-white uppercase tracking-tight">
+                      {treemapDetailsLookup[selectedTreemapItem.ticker]?.title || selectedTreemapItem.fullName || selectedTreemapItem.name}
+                    </h3>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[10px] font-mono bg-cyan-950 text-cyan-400 border border-cyan-800/50 px-2 py-0.5 rounded font-bold uppercase tracking-wider">
+                        {treemapDetailsLookup[selectedTreemapItem.ticker]?.badge || selectedTreemapItem.ticker}
+                      </span>
+                      <span className="text-slate-500 text-xs">•</span>
+                      <span className="text-slate-400 text-[11px] font-medium">Segmento: {selectedTreemapItem.category}</span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowTreemapDetailModal(false)}
+                  className="text-slate-400 hover:text-white p-1.5 hover:bg-slate-800 rounded-lg transition-all cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 overflow-y-auto space-y-6 flex-1 text-slate-300">
+                
+                {/* Visual Highlights Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-[#05080e] border border-slate-800/80 rounded-xl p-4 flex flex-col justify-center">
+                    <span className="text-[10px] text-slate-500 font-mono uppercase tracking-wider">Capacidade Projetada / Operacional</span>
+                    <span className="text-2xl font-black text-white mt-1">
+                      {selectedTreemapItem.size.toLocaleString('pt-BR')} <span className="text-xs text-slate-500">MW</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono mt-1">Total de potência instalada ativa</span>
+                  </div>
+                  
+                  <div className="bg-[#05080e] border border-slate-800/80 rounded-xl p-4 flex flex-col justify-center">
+                    <span className="text-[10px] text-slate-500 font-mono uppercase tracking-wider">
+                      {mapView === 'live' ? `Desvio st=${mapTimeframe}` : mapView === 'mensal' ? 'Desvio Sazonal Média' : mapView === 'anual' ? 'Crescimento YoY' : 'CAGR Requerido'}
+                    </span>
+                    <span className={`text-2xl font-black mt-1 ${selectedTreemapItem.change >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {selectedTreemapItem.change >= 0 ? '+' : ''}{selectedTreemapItem.change.toFixed(2)}%
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono mt-1">Performance comparativa do ativo</span>
+                  </div>
+
+                  <div className="bg-[#05080e] border border-slate-800/80 rounded-xl p-4 flex flex-col justify-center">
+                    <span className="text-[10px] text-slate-500 font-mono uppercase tracking-wider">Regime Operativo Principal</span>
+                    <span className="text-sm font-bold text-yellow-400 mt-2">
+                      {selectedTreemapItem.category === 'Centralizado (ONS SIN)' ? 'Despacho ONS SIN' : 'Compensação de Créditos'}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono mt-1">Estrutura física e regulatória</span>
+                  </div>
+                </div>
+
+                {/* Main Content Layout Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Left Column: Description & Subcomponents */}
+                  <div className="space-y-5">
+                    <div>
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-2 font-mono flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full" />
+                        Visão Geral e Descrição
+                      </h4>
+                      <p className="text-xs text-slate-400 leading-relaxed bg-[#05080e]/40 border border-slate-900 rounded-xl p-4">
+                        {treemapDetailsLookup[selectedTreemapItem.ticker]?.description || "Informações operacionais detalhadas deste ativo no mix elétrico nacional."}
+                      </p>
+                    </div>
+
+                    <div>
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-3 font-mono flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full" />
+                        Componentes e Subcategorias do Ativo
+                      </h4>
+                      <div className="border border-slate-800/60 rounded-xl overflow-hidden">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="bg-[#11192e] text-slate-400 border-b border-slate-800 font-mono text-[10px]">
+                              <th className="p-3">Categoria / Ativo</th>
+                              <th className="p-3 text-center">Fatia Est.</th>
+                              <th className="p-3 text-right">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/40 font-mono text-[11px]">
+                            {treemapDetailsLookup[selectedTreemapItem.ticker]?.subComponents.map((sub: any, idx: number) => (
+                              <tr key={idx} className="hover:bg-slate-900/30 transition-colors">
+                                <td className="p-3 text-white font-sans font-medium">{sub.name}</td>
+                                <td className="p-3 text-center text-cyan-400 font-bold">{sub.share}</td>
+                                <td className="p-3 text-right">
+                                  <span className="px-2 py-0.5 rounded-full bg-emerald-950/40 text-emerald-400 border border-emerald-900/40 font-bold text-[9px]">
+                                    {sub.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            )) || (
+                              <tr>
+                                <td colSpan={3} className="p-3 text-center text-slate-500">Nenhum subsetor mapeado</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Regulatory & Challenges */}
+                  <div className="space-y-5">
+                    {/* Regulatory Box */}
+                    <div className="bg-[#1e1b12] border border-yellow-800/30 rounded-xl p-4">
+                      <h4 className="text-xs font-bold text-yellow-400 uppercase tracking-wider mb-2 font-mono flex items-center gap-1.5">
+                        <ShieldAlert className="w-4 h-4 text-yellow-400 shrink-0" />
+                        Estrutura Regulatória (Lei 14.300 / ONS)
+                      </h4>
+                      <p className="text-[11px] text-slate-300 leading-relaxed font-mono">
+                        {treemapDetailsLookup[selectedTreemapItem.ticker]?.regulatoryText || "Este ativo opera sob as diretrizes básicas do Sistema Interligado Nacional."}
+                      </p>
+                    </div>
+
+                    {/* Vision 2040 Box */}
+                    <div className="bg-[#0b1b1e] border border-cyan-800/30 rounded-xl p-4">
+                      <h4 className="text-xs font-bold text-cyan-400 uppercase tracking-wider mb-2 font-mono flex items-center gap-1.5">
+                        <Sparkles className="w-4 h-4 text-cyan-400 shrink-0" />
+                        Diretriz Brasil Vision 2040 (20.000 kWh/capita)
+                      </h4>
+                      <p className="text-[11px] text-slate-300 leading-relaxed font-mono">
+                        {treemapDetailsLookup[selectedTreemapItem.ticker]?.vision2040Text || "O plano de abundância energética prevê forte acoplamento com baterias industriais e descentralização."}
+                      </p>
+                    </div>
+
+                    {/* Challenges list */}
+                    <div>
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-2 font-mono flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full" />
+                        Desafios Técnicos & Econômicos Críticos
+                      </h4>
+                      <ul className="space-y-1.5">
+                        {treemapDetailsLookup[selectedTreemapItem.ticker]?.challenges.map((challenge: string, idx: number) => (
+                          <li key={idx} className="text-xs text-slate-400 flex items-start gap-2 leading-relaxed bg-[#05080e]/20 p-2 rounded border border-slate-900">
+                            <span className="text-rose-400 font-bold font-mono">0{idx+1}.</span>
+                            <span>{challenge}</span>
+                          </li>
+                        )) || (
+                          <li className="text-xs text-slate-500 font-mono">Nenhum desafio registrado</li>
+                        )}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Footer */}
+              <div className="bg-[#11192e] border-t border-slate-800 px-6 py-4 flex flex-col sm:flex-row gap-3 justify-between items-center shrink-0">
+                <div className="text-[10px] text-slate-500 font-mono">
+                  Ativo Selecionado: {selectedTreemapItem.fullName} • Duplo clique para inspecionar
+                </div>
+                
+                <div className="flex gap-2 w-full sm:w-auto">
+                  <button
+                    onClick={() => setShowTreemapDetailModal(false)}
+                    className="flex-1 sm:flex-none bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 font-bold px-4 py-2.5 rounded-xl text-xs transition-all cursor-pointer"
+                  >
+                    Fechar Detalhes
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowTreemapDetailModal(false);
+                      setActiveTab('ai');
+                      // Wait a frame for tab update, then send chat
+                      setTimeout(() => {
+                        handleSendChat(undefined, `Quais são as melhores oportunidades regulatórias e tecnológicas hoje para investir e otimizar ativos de ${selectedTreemapItem.fullName}? Detalhe os desafios de ${treemapDetailsLookup[selectedTreemapItem.ticker]?.challenges[0] || 'geração'}`);
+                      }, 100);
+                    }}
+                    className="flex-1 sm:flex-none bg-gradient-to-r from-cyan-400 to-blue-500 text-black font-extrabold px-5 py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all hover:opacity-95 cursor-pointer active:scale-[0.98]"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    Consultar Assistente AI sobre este Ativo
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
 
       {/* Simulation Text Report Modal */}
       <AnimatePresence>
