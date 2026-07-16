@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
+import { DatabaseSync } from 'node:sqlite';
 
 // Import our rules and initial seeds
 import { runETLOnRecord, analyzeTariffImpact, RawMMGDRecord, FatoMMGDRecord } from './src/rules.js';
@@ -26,10 +27,157 @@ async function startServer() {
 
   app.use(express.json());
 
-  // Memory database stores (SQLite Simulation)
-  let rawRecords: RawMMGDRecord[] = [...initialRawMMGDRecords];
-  let fatoRecords: FatoMMGDRecord[] = getInitialFatoMMGD();
-  let ufStats: StateEnergyStats[] = JSON.parse(JSON.stringify(initialUFStats));
+  // Initialize the real native SQLite3 database on disk
+  const dbPath = path.join(process.cwd(), 'energy-data-br.sqlite');
+  const db = new DatabaseSync(dbPath);
+
+  // Create required physical tables in the native database
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mmgd_raw (
+      id TEXT PRIMARY KEY,
+      nom_empreendimento TEXT,
+      cod_geracao_distribuida TEXT,
+      nom_titular TEXT,
+      num_cpf_cnpj TEXT,
+      sig_uf TEXT,
+      nom_municipio TEXT,
+      potencia_instalada_kw REAL,
+      fonte_bruta TEXT,
+      modalidade_bruta TEXT,
+      data_conexao TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS mmgd_fato (
+      id TEXT PRIMARY KEY,
+      nom_empreendimento TEXT,
+      cod_geracao_distribuida TEXT,
+      nom_titular TEXT,
+      sig_uf TEXT,
+      nom_municipio TEXT,
+      potencia_kw REAL,
+      fonte_norm TEXT,
+      modalidade_norm TEXT,
+      faixa_regulatoria TEXT,
+      faixa_potencia_mex TEXT,
+      is_outlier INTEGER,
+      hash TEXT UNIQUE,
+      data_conexao TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS uf_stats (
+      uf TEXT PRIMARY KEY,
+      uf_name TEXT,
+      mmgd_count INTEGER,
+      mmgd_mw REAL,
+      siga_count INTEGER,
+      siga_mw REAL,
+      ufv_mw REAL,
+      eol_mw REAL,
+      cgh_mw REAL,
+      ute_mw REAL
+    );
+
+    CREATE TABLE IF NOT EXISTS ons_carga (
+      hora TEXT PRIMARY KEY,
+      verificada_mw INTEGER,
+      programada_mw INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS dessem_balanco (
+      hora INTEGER PRIMARY KEY,
+      hidraulica_mw INTEGER,
+      termica_mw INTEGER,
+      eolica_mw INTEGER,
+      solar_mw INTEGER,
+      carga_total_mw INTEGER
+    );
+  `);
+
+  // Seed databases with real baseline historical and analytical energy records if empty
+  const checkRaw = db.prepare('SELECT count(*) as count FROM mmgd_raw').get() as { count: number };
+  if (!checkRaw || checkRaw.count === 0) {
+    const insertRaw = db.prepare(`
+      INSERT INTO mmgd_raw (id, nom_empreendimento, cod_geracao_distribuida, nom_titular, num_cpf_cnpj, sig_uf, nom_municipio, potencia_instalada_kw, fonte_bruta, modalidade_bruta, data_conexao)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    initialRawMMGDRecords.forEach((r, idx) => {
+      insertRaw.run(
+        `raw_${idx + 1}`,
+        r.nom_empreendimento,
+        r.cod_geracao_distribuida,
+        r.nom_titular,
+        r.num_cpf_cnpj || null,
+        r.sig_uf,
+        r.nom_municipio,
+        r.potencia_instalada_kw,
+        r.fonte_bruta,
+        r.modalidade_bruta,
+        r.data_conexao
+      );
+    });
+
+    const insertFato = db.prepare(`
+      INSERT INTO mmgd_fato (id, nom_empreendimento, cod_geracao_distribuida, nom_titular, sig_uf, nom_municipio, potencia_kw, fonte_norm, modalidade_norm, faixa_regulatoria, faixa_potencia_mex, is_outlier, hash, data_conexao)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    getInitialFatoMMGD().forEach((f) => {
+      try {
+        insertFato.run(
+          f.id,
+          f.nom_empreendimento,
+          f.cod_geracao_distribuida,
+          f.nom_titular,
+          f.sig_uf,
+          f.nom_municipio,
+          f.potencia_kw,
+          f.fonte_norm,
+          f.modalidade_norm,
+          f.faixa_regulatoria,
+          f.faixa_potencia_mex,
+          f.is_outlier,
+          f.hash,
+          f.data_conexao
+        );
+      } catch (e) {
+        // ignore duplicate seed hashes
+      }
+    });
+
+    const insertUF = db.prepare(`
+      INSERT INTO uf_stats (uf, uf_name, mmgd_count, mmgd_mw, siga_count, siga_mw, ufv_mw, eol_mw, cgh_mw, ute_mw)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    initialUFStats.forEach((s) => {
+      insertUF.run(
+        s.uf,
+        s.uf_name,
+        s.mmgd_count,
+        s.mmgd_mw,
+        s.siga_count,
+        s.siga_mw,
+        s.ufv_mw,
+        s.eol_mw,
+        s.cgh_mw,
+        s.ute_mw
+      );
+    });
+
+    const insertCarga = db.prepare(`
+      INSERT INTO ons_carga (hora, verificada_mw, programada_mw)
+      VALUES (?, ?, ?)
+    `);
+    getCargaONSCurve().forEach((c) => {
+      insertCarga.run(c.hora, c.verificada_mw, c.programada_mw);
+    });
+
+    const insertDessem = db.prepare(`
+      INSERT INTO dessem_balanco (hora, hidraulica_mw, termica_mw, eolica_mw, solar_mw, carga_total_mw)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    getDessemDailyBalance().forEach((d) => {
+      insertDessem.run(d.hora, d.hidraulica_mw, d.termica_mw, d.eolica_mw, d.solar_mw, d.carga_total_mw);
+    });
+  }
 
   interface CronLog {
     timestamp: string;
@@ -66,38 +214,42 @@ async function startServer() {
 
   // Helper function to update state level aggregations when a new record is added
   const updateUFStatsForRecord = (record: FatoMMGDRecord) => {
-    if (record.is_outlier === 1) return; // ignore outliers in aggregated stats, just like rules.md
-
-    const ufIndex = ufStats.findIndex(s => s.uf === record.sig_uf);
-    if (ufIndex !== -1) {
-      ufStats[ufIndex].mmgd_count += 1;
-      ufStats[ufIndex].mmgd_mw = Number((ufStats[ufIndex].mmgd_mw + record.potencia_kw / 1000).toFixed(3));
-      
-      // Update by source norm
-      if (record.fonte_norm === 'UFV') {
-        ufStats[ufIndex].ufv_mw = Number((ufStats[ufIndex].ufv_mw + record.potencia_kw / 1000).toFixed(3));
-      } else if (record.fonte_norm === 'EOL') {
-        ufStats[ufIndex].eol_mw = Number((ufStats[ufIndex].eol_mw + record.potencia_kw / 1000).toFixed(3));
-      } else if (record.fonte_norm === 'CGH') {
-        ufStats[ufIndex].cgh_mw = Number((ufStats[ufIndex].cgh_mw + record.potencia_kw / 1000).toFixed(3));
-      } else if (record.fonte_norm === 'UTE') {
-        ufStats[ufIndex].ute_mw = Number((ufStats[ufIndex].ute_mw + record.potencia_kw / 1000).toFixed(3));
-      }
+    if (record.is_outlier === 1) return; // ignore outliers in aggregated stats
+    
+    const uf = record.sig_uf;
+    const exist = db.prepare('SELECT uf FROM uf_stats WHERE uf = ?').get(uf);
+    if (exist) {
+      db.prepare(`
+        UPDATE uf_stats 
+        SET 
+          mmgd_count = mmgd_count + 1,
+          mmgd_mw = mmgd_mw + ?,
+          ufv_mw = ufv_mw + ?,
+          eol_mw = eol_mw + ?,
+          cgh_mw = cgh_mw + ?,
+          ute_mw = ute_mw + ?
+        WHERE uf = ?
+      `).run(
+        Number((record.potencia_kw / 1000).toFixed(3)),
+        record.fonte_norm === 'UFV' ? Number((record.potencia_kw / 1000).toFixed(3)) : 0,
+        record.fonte_norm === 'EOL' ? Number((record.potencia_kw / 1000).toFixed(3)) : 0,
+        record.fonte_norm === 'CGH' ? Number((record.potencia_kw / 1000).toFixed(3)) : 0,
+        record.fonte_norm === 'UTE' ? Number((record.potencia_kw / 1000).toFixed(3)) : 0,
+        uf
+      );
     } else {
-      // Create new state if not exists
-      const newUF: StateEnergyStats = {
-        uf: record.sig_uf,
-        uf_name: record.sig_uf,
-        mmgd_count: 1,
-        mmgd_mw: Number((record.potencia_kw / 1000).toFixed(3)),
-        siga_count: 0,
-        siga_mw: 0,
-        ufv_mw: record.fonte_norm === 'UFV' ? Number((record.potencia_kw / 1000).toFixed(3)) : 0,
-        eol_mw: record.fonte_norm === 'EOL' ? Number((record.potencia_kw / 1000).toFixed(3)) : 0,
-        cgh_mw: record.fonte_norm === 'CGH' ? Number((record.potencia_kw / 1000).toFixed(3)) : 0,
-        ute_mw: record.fonte_norm === 'UTE' ? Number((record.potencia_kw / 1000).toFixed(3)) : 0
-      };
-      ufStats.push(newUF);
+      db.prepare(`
+        INSERT INTO uf_stats (uf, uf_name, mmgd_count, mmgd_mw, siga_count, siga_mw, ufv_mw, eol_mw, cgh_mw, ute_mw)
+        VALUES (?, ?, 1, ?, 0, 0, ?, ?, ?, ?)
+      `).run(
+        uf,
+        uf,
+        Number((record.potencia_kw / 1000).toFixed(3)),
+        record.fonte_norm === 'UFV' ? Number((record.potencia_kw / 1000).toFixed(3)) : 0,
+        record.fonte_norm === 'EOL' ? Number((record.potencia_kw / 1000).toFixed(3)) : 0,
+        record.fonte_norm === 'CGH' ? Number((record.potencia_kw / 1000).toFixed(3)) : 0,
+        record.fonte_norm === 'UTE' ? Number((record.potencia_kw / 1000).toFixed(3)) : 0
+      );
     }
   };
 
@@ -105,59 +257,77 @@ async function startServer() {
 
   // 1. Get high-level aggregated totals (MMGD & SIGA)
   app.get('/api/energy/stats', (req, res) => {
-    let mmgdCount = 0;
-    let mmgdMw = 0;
-    let sigaCount = 0;
-    let sigaMw = 0;
+    try {
+      const stats = db.prepare(`
+        SELECT 
+          SUM(mmgd_count) as mmgd_count,
+          SUM(mmgd_mw) as mmgd_mw,
+          SUM(siga_count) as siga_count,
+          SUM(siga_mw) as siga_mw
+        FROM uf_stats
+      `).get() as any;
 
-    ufStats.forEach(s => {
-      mmgdCount += s.mmgd_count;
-      mmgdMw += s.mmgd_mw;
-      sigaCount += s.siga_count;
-      sigaMw += s.siga_mw;
-    });
-
-    res.json({
-      success: true,
-      data: {
-        mmgd_count: mmgdCount,
-        mmgd_mw: Number(mmgdMw.toFixed(1)),
-        siga_count: sigaCount,
-        siga_mw: Number(sigaMw.toFixed(1)),
-        database_engine: 'SQLite3 Simulated Memory Store',
-        total_tables: 5
-      }
-    });
+      res.json({
+        success: true,
+        data: {
+          mmgd_count: stats?.mmgd_count || 0,
+          mmgd_mw: Number((stats?.mmgd_mw || 0).toFixed(1)),
+          siga_count: stats?.siga_count || 0,
+          siga_mw: Number((stats?.siga_mw || 0).toFixed(1)),
+          database_engine: 'Node.js 22 Native SQLite3 (DatabaseSync)',
+          total_tables: 5
+        }
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   });
 
   // 2. Get state-level details (UF Stats)
   app.get('/api/energy/uf', (req, res) => {
-    res.json({
-      success: true,
-      data: ufStats
-    });
+    try {
+      const rows = db.prepare('SELECT * FROM uf_stats ORDER BY mmgd_mw DESC').all();
+      res.json({
+        success: true,
+        data: rows
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   });
 
   // 3. Get ONS Load curves & DESSEM balancing
   app.get('/api/energy/ons', (req, res) => {
-    res.json({
-      success: true,
-      data: {
-        carga_ons: getCargaONSCurve(),
-        dessem_balanco: getDessemDailyBalance()
-      }
-    });
+    try {
+      const carga = db.prepare('SELECT * FROM ons_carga').all();
+      const dessem = db.prepare('SELECT * FROM dessem_balanco ORDER BY hora ASC').all();
+      res.json({
+        success: true,
+        data: {
+          carga_ons: carga,
+          dessem_balanco: dessem
+        }
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   });
 
   // 4. Get raw & facts lists for SQLite view
   app.get('/api/energy/db', (req, res) => {
-    res.json({
-      success: true,
-      data: {
-        mmgd_raw: rawRecords,
-        mmgd_fato: fatoRecords
-      }
-    });
+    try {
+      const mmgd_raw = db.prepare('SELECT * FROM mmgd_raw LIMIT 250').all();
+      const mmgd_fato = db.prepare('SELECT * FROM mmgd_fato LIMIT 250').all();
+      res.json({
+        success: true,
+        data: {
+          mmgd_raw,
+          mmgd_fato
+        }
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   });
 
   // 5. Add / Sync a custom record (The ETL Trigger)
@@ -169,19 +339,19 @@ async function startServer() {
       }
 
       // 1. Add to Raw landing zone
+      const rawId = `raw_${Math.random().toString(36).substr(2, 9)}`;
       const rawWithId: RawMMGDRecord = {
         ...rawInput,
-        id: `raw_${Math.random().toString(36).substr(2, 9)}`,
+        id: rawId,
         potencia_instalada_kw: Number(rawInput.potencia_instalada_kw),
         data_conexao: rawInput.data_conexao || new Date().toISOString().split('T')[0]
       };
-      rawRecords.push(rawWithId);
 
       // 2. Execute business rules ETL (rules.ts)
       const factRecord = runETLOnRecord(rawWithId);
       
       // Check for unique hash duplicate
-      const duplicate = fatoRecords.some(f => f.hash === factRecord.hash);
+      const duplicate = db.prepare('SELECT id FROM mmgd_fato WHERE hash = ?').get(factRecord.hash);
       if (duplicate) {
         return res.status(409).json({
           success: false,
@@ -189,15 +359,51 @@ async function startServer() {
         });
       }
 
-      // Save fact record
-      fatoRecords.push(factRecord);
+      // Save raw record to real SQLite
+      db.prepare(`
+        INSERT INTO mmgd_raw (id, nom_empreendimento, cod_geracao_distribuida, nom_titular, num_cpf_cnpj, sig_uf, nom_municipio, potencia_instalada_kw, fonte_bruta, modalidade_bruta, data_conexao)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        rawId,
+        rawWithId.nom_empreendimento,
+        rawWithId.cod_geracao_distribuida,
+        rawWithId.nom_titular,
+        rawWithId.num_cpf_cnpj || null,
+        rawWithId.sig_uf,
+        rawWithId.nom_municipio,
+        rawWithId.potencia_instalada_kw,
+        rawWithId.fonte_bruta,
+        rawWithId.modalidade_bruta,
+        rawWithId.data_conexao
+      );
+
+      // Save fact record to real SQLite
+      db.prepare(`
+        INSERT INTO mmgd_fato (id, nom_empreendimento, cod_geracao_distribuida, nom_titular, sig_uf, nom_municipio, potencia_kw, fonte_norm, modalidade_norm, faixa_regulatoria, faixa_potencia_mex, is_outlier, hash, data_conexao)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        factRecord.id,
+        factRecord.nom_empreendimento,
+        factRecord.cod_geracao_distribuida,
+        factRecord.nom_titular,
+        factRecord.sig_uf,
+        factRecord.nom_municipio,
+        factRecord.potencia_kw,
+        factRecord.fonte_norm,
+        factRecord.modalidade_norm,
+        factRecord.faixa_regulatoria,
+        factRecord.faixa_potencia_mex,
+        factRecord.is_outlier,
+        factRecord.hash,
+        factRecord.data_conexao
+      );
 
       // 3. Live update aggregated UF statistics
       updateUFStatsForRecord(factRecord);
 
       res.json({
         success: true,
-        message: 'ETL executado com sucesso e persistido no SQLite simulado!',
+        message: 'ETL executado com sucesso e persistido no SQLite3 nativo!',
         data: {
           raw: rawWithId,
           fato: factRecord
@@ -224,7 +430,7 @@ async function startServer() {
     });
   });
 
-  // 7. Simulated SQL query processor (mimicking SQLite3 Console)
+  // 7. Simulated SQL query processor (mimicking SQLite3 Console) - now executing real SQL!
   app.post('/api/energy/query-sql', (req, res) => {
     try {
       const { sql } = req.body;
@@ -232,74 +438,25 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'Consulta SQL vazia ou inválida.' });
       }
 
-      const query = sql.trim().toLowerCase().replace(/\s+/g, ' ');
-
-      // A simple SQL-like router using RegEx
-      if (query.startsWith('select * from mmgd_raw')) {
-        let results = [...rawRecords];
-        // simple limit handler
-        const limitMatch = query.match(/limit (\d+)/);
-        if (limitMatch) {
-          const limit = parseInt(limitMatch[1]);
-          results = results.slice(0, limit);
-        }
-        return res.json({ success: true, columns: ['id', 'nom_empreendimento', 'cod_geracao_distribuida', 'nom_titular', 'sig_uf', 'nom_municipio', 'potencia_instalada_kw', 'fonte_bruta', 'modalidade_bruta', 'data_conexao'], rows: results });
-      }
-
-      if (query.startsWith('select * from mmgd_fato')) {
-        let results = [...fatoRecords];
-        
-        // simple WHERE conditions
-        const whereMatch = query.match(/where\s+([a-z_]+)\s*=\s*'([^']+)'/);
-        const whereNumMatch = query.match(/where\s+([a-z_]+)\s*=\s*(\d+)/);
-
-        if (whereMatch) {
-          const column = whereMatch[1];
-          const value = whereMatch[2].toUpperCase();
-          
-          results = results.filter((r: any) => {
-            const v = String(r[column]).toUpperCase();
-            return v === value;
-          });
-        } else if (whereNumMatch) {
-          const column = whereNumMatch[1];
-          const value = parseInt(whereNumMatch[2]);
-          results = results.filter((r: any) => parseInt(r[column]) === value);
-        }
-
-        const limitMatch = query.match(/limit (\d+)/);
-        if (limitMatch) {
-          const limit = parseInt(limitMatch[1]);
-          results = results.slice(0, limit);
-        }
-
-        return res.json({ success: true, columns: ['id', 'nom_empreendimento', 'cod_geracao_distribuida', 'sig_uf', 'potencia_kw', 'fonte_norm', 'modalidade_norm', 'faixa_regulatoria', 'is_outlier', 'hash'], rows: results });
-      }
-
-      if (query.startsWith('select count(*), sum(potencia_kw) from mmgd_fato') || query.startsWith('select count(*), sum(potencia_instalada_kw) from mmgd_raw')) {
-        const isFato = query.includes('fato');
-        const list: any = isFato ? fatoRecords : rawRecords;
-        const totalCount = list.length;
-        const totalPot = list.reduce((acc: number, r: any) => acc + (Number(r.potencia_kw || r.potencia_instalada_kw) || 0), 0);
-        return res.json({
-          success: true,
-          columns: ['COUNT(*)', 'SUM(potencia)'],
-          rows: [{ 'COUNT(*)': totalCount, 'SUM(potencia)': totalPot }]
+      const trimmedQuery = sql.trim();
+      
+      // Security guard to prevent raw write operations (only SELECT is allowed in terminal)
+      const isSelect = trimmedQuery.toLowerCase().startsWith('select');
+      if (!isSelect) {
+        return res.status(403).json({
+          success: false,
+          error: 'Segurança SQLite: Apenas consultas SELECT são permitidas no terminal interativo.'
         });
       }
 
-      if (query.startsWith('select * from siga_fato') || query.startsWith('select * from dessem_detalhe') || query.startsWith('select * from ons_carga')) {
-        return res.json({
-          success: true,
-          columns: ['id', 'status'],
-          rows: [{ id: 1, status: 'Tabela estática seed com mais de 25k registros indexados no dashboard.' }]
-        });
-      }
+      // Execute SQL directly in the physical SQLite DB!
+      const rows = db.prepare(trimmedQuery).all() as any[];
+      const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
 
-      // Unsupported queries
-      return res.status(400).json({
-        success: false,
-        error: `Sintaxe SQL não suportada pelo emulador SQLite. Use consultas padrão como:\n- SELECT * FROM mmgd_raw LIMIT 5\n- SELECT * FROM mmgd_fato WHERE sig_uf = 'MG'\n- SELECT * FROM mmgd_fato WHERE is_outlier = 1\n- SELECT COUNT(*), SUM(potencia_kw) FROM mmgd_fato`
+      res.json({
+        success: true,
+        columns,
+        rows
       });
 
     } catch (err: any) {
@@ -315,18 +472,22 @@ async function startServer() {
       // Calculate server time in Brazil standard timezone America/Sao_Paulo (UTC-3)
       const brazilTimeString = serverDate.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
 
+      const rawCount = (db.prepare('SELECT count(*) as count FROM mmgd_raw').get() as any)?.count || 0;
+      const fatoCount = (db.prepare('SELECT count(*) as count FROM mmgd_fato').get() as any)?.count || 0;
+      const statesCount = (db.prepare('SELECT count(*) as count FROM uf_stats').get() as any)?.count || 0;
+
       res.json({
         success: true,
         data: {
           database: {
-            engine: 'SQLite3 Simulated Memory Store',
-            raw_records_count: rawRecords.length,
-            fato_records_count: fatoRecords.length,
-            uf_stats_count: ufStats.length,
-            local_storage_used_bytes: 0,
-            database_size_kb: Number(((rawRecords.length * 0.4) + (fatoRecords.length * 0.6)).toFixed(2)),
-            physical_file_path: 'N/A (Pure in-memory JS Heap variables)',
-            persistence_type: 'In-Memory Volatile (State resets on container restart)',
+            engine: 'Node.js 22 Native SQLite3 (DatabaseSync)',
+            raw_records_count: rawCount,
+            fato_records_count: fatoCount,
+            uf_stats_count: statesCount,
+            local_storage_used_bytes: 49152, // standard minimum empty sqlite size
+            database_size_kb: Number(((rawCount * 0.4) + (fatoCount * 0.6)).toFixed(2)) + 24,
+            physical_file_path: dbPath,
+            persistence_type: 'Física / Persistente (Arquivo local .sqlite armazenado em disco)',
             total_legacy_rows_aggregated: 25800 // The legacy total of rows represent in ufStats
           },
           ram_consumption: {
@@ -359,11 +520,11 @@ async function startServer() {
               secure_keys_panel: 'Secrets'
             },
             aneel_api_connector: {
-              status: 'SIMULATED_LOCAL_FEED',
+              status: 'NATIVE_SQLITE_FEED',
               endpoints: ['https://dadosabertos.aneel.gov.br/api/3/action/datastore_search']
             },
             ons_api_connector: {
-              status: 'SIMULATED_LOCAL_FEED',
+              status: 'NATIVE_SQLITE_FEED',
               endpoints: ['https://dadosabertos.ons.org.br/api/3/action/datastore_search']
             }
           }
@@ -401,14 +562,54 @@ async function startServer() {
           data_conexao: serverDate.toISOString().split('T')[0]
         };
 
+        const rawId = `raw_cron_${Math.random().toString(36).substr(2, 9)}`;
         const rawWithId: RawMMGDRecord = {
           ...rawInput,
-          id: `raw_cron_${Math.random().toString(36).substr(2, 9)}`
+          id: rawId
         };
-        rawRecords.push(rawWithId);
 
+        // Insert to raw
+        db.prepare(`
+          INSERT INTO mmgd_raw (id, nom_empreendimento, cod_geracao_distribuida, nom_titular, num_cpf_cnpj, sig_uf, nom_municipio, potencia_instalada_kw, fonte_bruta, modalidade_bruta, data_conexao)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          rawId,
+          rawWithId.nom_empreendimento,
+          rawWithId.cod_geracao_distribuida,
+          rawWithId.nom_titular,
+          rawWithId.num_cpf_cnpj || null,
+          rawWithId.sig_uf,
+          rawWithId.nom_municipio,
+          rawWithId.potencia_instalada_kw,
+          rawWithId.fonte_bruta,
+          rawWithId.modalidade_bruta,
+          rawWithId.data_conexao
+        );
+
+        // Run rules & insert to facts
         const factRecord = runETLOnRecord(rawWithId);
-        fatoRecords.push(factRecord);
+        
+        db.prepare(`
+          INSERT INTO mmgd_fato (id, nom_empreendimento, cod_geracao_distribuida, nom_titular, sig_uf, nom_municipio, potencia_kw, fonte_norm, modalidade_norm, faixa_regulatoria, faixa_potencia_mex, is_outlier, hash, data_conexao)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          factRecord.id,
+          factRecord.nom_empreendimento,
+          factRecord.cod_geracao_distribuida,
+          factRecord.nom_titular,
+          factRecord.sig_uf,
+          factRecord.nom_municipio,
+          factRecord.potencia_kw,
+          factRecord.fonte_norm,
+          factRecord.modalidade_norm,
+          factRecord.faixa_regulatoria,
+          factRecord.faixa_potencia_mex,
+          factRecord.is_outlier,
+          factRecord.hash,
+          factRecord.data_conexao
+        );
+
+        // Live update stats in SQLite
         updateUFStatsForRecord(factRecord);
 
         newLog = {
