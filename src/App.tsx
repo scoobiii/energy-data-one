@@ -32,7 +32,9 @@ import {
   Check,
   AlertTriangle,
   Calendar,
-  ChevronDown
+  ChevronDown,
+  Map,
+  LayoutGrid
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -746,6 +748,42 @@ const treemapDetailsLookup: Record<string, {
   },
 };
 
+interface BrazilStateGeo {
+  uf: string;
+  points: string;
+  centroid: [number, number];
+}
+
+const BRAZIL_STATE_MAP: Record<string, BrazilStateGeo> = {
+  RR: { uf: 'RR', points: '140,20 180,20 190,80 145,80', centroid: [165, 50] },
+  AP: { uf: 'AP', points: '290,40 330,40 315,90 275,80', centroid: [300, 65] },
+  AM: { uf: 'AM', points: '40,100 190,100 180,210 130,220 90,225 35,170', centroid: [110, 160] },
+  PA: { uf: 'PA', points: '190,100 290,100 290,40 330,85 340,210 270,220 180,210', centroid: [260, 140] },
+  AC: { uf: 'AC', points: '10,210 50,215 45,250 15,240', centroid: [30, 230] },
+  RO: { uf: 'RO', points: '80,225 130,220 145,260 110,290 75,260', centroid: [110, 260] },
+  TO: { uf: 'TO', points: '295,200 335,180 345,280 315,285', centroid: [320, 240] },
+  MA: { uf: 'MA', points: '320,100 375,110 380,185 330,180', centroid: [350, 140] },
+  PI: { uf: 'PI', points: '375,110 420,125 405,210 380,185', centroid: [395, 160] },
+  CE: { uf: 'CE', points: '420,125 465,120 470,160 430,165', centroid: [445, 145] },
+  RN: { uf: 'RN', points: '465,120 505,125 500,150 470,145', centroid: [485, 135] },
+  PB: { uf: 'PB', points: '470,145 510,150 505,175 465,170', centroid: [490, 160] },
+  PE: { uf: 'PE', points: '430,165 505,175 500,195 425,190', centroid: [465, 180] },
+  AL: { uf: 'AL', points: '475,195 500,195 495,215 470,215', centroid: [485, 205] },
+  SE: { uf: 'SE', points: '465,215 485,215 480,235 460,230', centroid: [472, 225] },
+  BA: { uf: 'BA', points: '340,280 425,190 475,195 465,215 480,235 460,335 420,335 375,310', centroid: [415, 270] },
+  MT: { uf: 'MT', points: '180,210 270,220 295,310 270,335 210,335 175,290', centroid: [235, 275] },
+  GO: { uf: 'GO', points: '275,335 315,285 345,280 375,310 375,370 300,380', centroid: [330, 335] },
+  DF: { uf: 'DF', points: '340,335 350,335 350,345 340,345', centroid: [345, 340] },
+  MS: { uf: 'MS', points: '210,335 275,335 300,380 280,430 220,425', centroid: [255, 380] },
+  MG: { uf: 'MG', points: '300,380 375,370 420,335 450,335 440,410 360,420 315,410', centroid: [370, 380] },
+  ES: { uf: 'ES', points: '450,335 470,350 455,395 440,390', centroid: [455, 365] },
+  RJ: { uf: 'RJ', points: '415,410 445,395 435,425 405,420', centroid: [425, 412] },
+  SP: { uf: 'SP', points: '280,430 315,410 360,420 405,420 380,465 310,460', centroid: [340, 440] },
+  PR: { uf: 'PR', points: '260,465 310,460 355,465 330,505 275,500', centroid: [305, 485] },
+  SC: { uf: 'SC', points: '275,500 330,505 320,535 265,530', centroid: [295, 520] },
+  RS: { uf: 'RS', points: '250,530 320,535 295,585 235,575', centroid: [275, 560] }
+};
+
 export default function App() {
   // Tabs: 'dashboard' | 'ons' | 'db' | 'calc' | 'ai'
   const [activeTab, setActiveTab] = useState<'dashboard' | 'ons' | 'db' | 'calc' | 'ai'>('dashboard');
@@ -754,6 +792,7 @@ export default function App() {
   const [dbStats, setDbStats] = useState<DBStats | null>(null);
   const [ufStats, setUfStats] = useState<StateEnergyStats[]>([]);
   const [selectedUF, setSelectedUF] = useState<string>('MG');
+  const [mapLayout, setMapLayout] = useState<'grid' | 'geo'>('grid');
   
   // ONS States
   const [cargaData, setCargaData] = useState<any[]>([]);
@@ -2290,7 +2329,7 @@ MEx Energia BR • Tecnologia em Barramento 800VDC e Microrredes.
                 {/* State selector grid map (D3 tree-like bento map style, highly polished and responsive) */}
                 <div className="lg:col-span-8 bg-[#0c1222] border border-slate-800 rounded-xl p-5 flex flex-col justify-between">
                   <div>
-                    <div className="flex justify-between items-start gap-4">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                       <div>
                         <h2 className="text-lg font-bold text-white flex items-center gap-2">
                           <MapPin className="w-5 h-5 text-cyan-400" />
@@ -2298,42 +2337,162 @@ MEx Energia BR • Tecnologia em Barramento 800VDC e Microrredes.
                         </h2>
                         <p className="text-xs text-slate-400 mt-0.5">Selecione uma UF para ver detalhes das faixas, fontes e conexões.</p>
                       </div>
-                      <div className="bg-[#11192e] px-2.5 py-1 text-slate-400 font-semibold border border-slate-800 text-xs rounded-lg uppercase">
-                        Brasil
+                      <div className="flex items-center gap-2 self-stretch sm:self-auto">
+                        <div className="flex bg-[#11192e] p-1 border border-slate-800 rounded-lg w-full sm:w-auto">
+                          <button
+                            onClick={() => setMapLayout('grid')}
+                            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                              mapLayout === 'grid'
+                                ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/10 font-bold'
+                                : 'text-slate-400 hover:text-slate-200'
+                            }`}
+                          >
+                            <LayoutGrid className="w-3.5 h-3.5" />
+                            Grade
+                          </button>
+                          <button
+                            onClick={() => setMapLayout('geo')}
+                            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                              mapLayout === 'geo'
+                                ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/10 font-bold'
+                                : 'text-slate-400 hover:text-slate-200'
+                            }`}
+                          >
+                            <Map className="w-3.5 h-3.5" />
+                            Geográfico
+                          </button>
+                        </div>
+                        <div className="bg-[#11192e] px-2.5 py-1.5 text-slate-400 font-semibold border border-slate-800 text-xs rounded-lg uppercase hidden sm:block">
+                          Brasil
+                        </div>
                       </div>
                     </div>
 
-                    {/* Interactive Grid Map representing Brazil */}
-                    <div className="grid grid-cols-5 sm:grid-cols-7 gap-2.5 mt-6 mb-6">
-                      {ufStats.map((ufItem) => {
-                        const isSelected = selectedUF === ufItem.uf;
-                        // Color intensity based on capacity
-                        const mw = ufItem.mmgd_mw;
-                        let bgClass = 'bg-slate-900/60 border-slate-800 hover:bg-slate-800';
-                        if (mw > 3000) {
-                          bgClass = isSelected ? 'bg-cyan-500 text-black border-cyan-400' : 'bg-cyan-950/60 text-cyan-200 border-cyan-900 hover:bg-cyan-900';
-                        } else if (mw > 1500) {
-                          bgClass = isSelected ? 'bg-cyan-500 text-black border-cyan-400' : 'bg-blue-950/60 text-blue-200 border-blue-900 hover:bg-blue-900';
-                        } else if (mw > 500) {
-                          bgClass = isSelected ? 'bg-cyan-500 text-black border-cyan-400' : 'bg-slate-900 text-slate-200 border-slate-800 hover:bg-slate-800';
-                        }
+                    {mapLayout === 'grid' ? (
+                      /* Interactive Grid Map representing Brazil */
+                      <div className="grid grid-cols-5 sm:grid-cols-7 gap-2.5 mt-6 mb-6">
+                        {ufStats.map((ufItem) => {
+                          const isSelected = selectedUF === ufItem.uf;
+                          // Color intensity based on capacity
+                          const mw = ufItem.mmgd_mw;
+                          let bgClass = 'bg-slate-900/60 border-slate-800 hover:bg-slate-800';
+                          if (mw > 3000) {
+                            bgClass = isSelected ? 'bg-cyan-500 text-black border-cyan-400' : 'bg-cyan-950/60 text-cyan-200 border-cyan-900 hover:bg-cyan-900';
+                          } else if (mw > 1500) {
+                            bgClass = isSelected ? 'bg-cyan-500 text-black border-cyan-400' : 'bg-blue-950/60 text-blue-200 border-blue-900 hover:bg-blue-900';
+                          } else if (mw > 500) {
+                            bgClass = isSelected ? 'bg-cyan-500 text-black border-cyan-400' : 'bg-slate-900 text-slate-200 border-slate-800 hover:bg-slate-800';
+                          }
 
-                        return (
-                          <button
-                            key={ufItem.uf}
-                            onClick={() => setSelectedUF(ufItem.uf)}
-                            className={`p-3 rounded-xl border text-center transition-all cursor-pointer relative group flex flex-col justify-between min-h-[70px] ${
-                              isSelected ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-black font-extrabold border-cyan-300 scale-105 shadow-lg shadow-cyan-500/20' : bgClass
-                            }`}
-                          >
-                            <span className="text-sm tracking-wide block">{ufItem.uf}</span>
-                            <span className={`text-[10px] font-medium block mt-1 ${isSelected ? 'text-black' : 'text-[#94a3b8]'}`}>
-                              {mw > 1000 ? `${(mw / 1000).toFixed(1)} GW` : `${mw.toFixed(0)} MW`}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
+                          return (
+                            <button
+                              key={ufItem.uf}
+                              onClick={() => setSelectedUF(ufItem.uf)}
+                              className={`p-3 rounded-xl border text-center transition-all cursor-pointer relative group flex flex-col justify-between min-h-[70px] ${
+                                isSelected ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-black font-extrabold border-cyan-300 scale-105 shadow-lg shadow-cyan-500/20' : bgClass
+                              }`}
+                            >
+                              <span className="text-sm tracking-wide block">{ufItem.uf}</span>
+                              <span className={`text-[10px] font-medium block mt-1 ${isSelected ? 'text-black' : 'text-[#94a3b8]'}`}>
+                                {mw > 1000 ? `${(mw / 1000).toFixed(1)} GW` : `${mw.toFixed(0)} MW`}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      /* Interactive Geographical Map of Brazil */
+                      <div className="w-full max-w-2xl mx-auto flex justify-center py-4 bg-[#05080e]/20 rounded-xl border border-slate-900/40 p-4 mt-6 mb-6">
+                        <svg viewBox="0 0 520 600" className="w-full h-auto max-h-[480px]">
+                          <rect width="520" height="600" rx="16" fill="none" className="pointer-events-none" />
+                          
+                          {/* Draw the states (sorted so DF is drawn last to be layered on top of GO) */}
+                          {[...ufStats]
+                            .sort((a, b) => (a.uf === 'DF' ? 1 : b.uf === 'DF' ? -1 : 0))
+                            .map((ufItem) => {
+                              const geo = BRAZIL_STATE_MAP[ufItem.uf];
+                              if (!geo) return null;
+
+                              const isSelected = selectedUF === ufItem.uf;
+                              const mw = ufItem.mmgd_mw;
+                              let fillVal = '#0f172a'; // slate-900
+                              let strokeVal = '#1e293b'; // slate-800
+                              let textVal = '#94a3b8'; // slate-400
+                              
+                              if (isSelected) {
+                                fillVal = '#06b6d4'; // cyan-500
+                                strokeVal = '#22d3ee'; // cyan-400
+                                textVal = '#0f172a'; // slate-900
+                              } else {
+                                if (mw > 3000) {
+                                  fillVal = '#083344'; // cyan-950
+                                  strokeVal = '#0e7490'; // cyan-700
+                                  textVal = '#cffafe'; // cyan-100
+                                } else if (mw > 1500) {
+                                  fillVal = '#172554'; // blue-950
+                                  strokeVal = '#1d4ed8'; // blue-700
+                                  textVal = '#dbeafe'; // blue-100
+                                } else if (mw > 500) {
+                                  fillVal = '#1e293b'; // slate-800
+                                  strokeVal = '#475569'; // slate-600
+                                  textVal = '#f1f5f9'; // slate-100
+                                } else {
+                                  fillVal = '#090d16'; // very dark slate
+                                  strokeVal = '#1e293b'; // slate-800
+                                  textVal = '#64748b'; // slate-500
+                                }
+                              }
+
+                              return (
+                                <g
+                                  key={ufItem.uf}
+                                  onClick={() => setSelectedUF(ufItem.uf)}
+                                  className="cursor-pointer group select-none"
+                                >
+                                  <title>{`${ufItem.uf_name} - ${mw.toFixed(1)} MW`}</title>
+                                  
+                                  <polygon
+                                    points={geo.points}
+                                    fill={fillVal}
+                                    stroke={strokeVal}
+                                    strokeWidth={isSelected ? 2.5 : 1}
+                                    className="transition-all duration-200 hover:fill-[#0891b2] hover:stroke-cyan-300"
+                                  />
+                                  
+                                  {/* Centered label */}
+                                  <text
+                                    x={geo.centroid[0]}
+                                    y={geo.centroid[1]}
+                                    textAnchor="middle"
+                                    dominantBaseline="middle"
+                                    fill={textVal}
+                                    fontSize={isSelected ? 11 : 9}
+                                    fontWeight={isSelected ? '900' : 'bold'}
+                                    className="pointer-events-none transition-all duration-200 font-sans"
+                                  >
+                                    {ufItem.uf}
+                                  </text>
+                                  
+                                  {/* MW subtitle inside larger/selected states */}
+                                  {(isSelected || mw > 1200) && ufItem.uf !== 'DF' && ufItem.uf !== 'SE' && ufItem.uf !== 'AL' && (
+                                    <text
+                                      x={geo.centroid[0]}
+                                      y={geo.centroid[1] + 11}
+                                      textAnchor="middle"
+                                      fill={isSelected ? '#0f172a' : '#94a3b8'}
+                                      fontSize={7}
+                                      fontWeight="bold"
+                                      className="pointer-events-none opacity-80 font-mono"
+                                    >
+                                      {mw > 1000 ? `${(mw / 1000).toFixed(1)}GW` : `${mw.toFixed(0)}MW`}
+                                    </text>
+                                  )}
+                                </g>
+                              );
+                            })}
+                        </svg>
+                      </div>
+                    )}
                   </div>
 
                   {/* Top 10 UFs horizontal chart */}
